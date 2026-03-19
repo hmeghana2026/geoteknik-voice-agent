@@ -1,6 +1,6 @@
 const express = require('express');
 const twilio = require('twilio');
-const { getCustomerByPhone, searchManuals, saveCallHistory } = require('../services/supabase');
+const { searchManuals, saveCallHistory } = require('../services/supabase');
 const { getAIResponse } = require('../services/ai');
 const { getEmbedding } = require('../services/embeddings');
 
@@ -19,75 +19,26 @@ router.post('/incoming', async (req, res) => {
   let session = sessions.get(callSid) || { step: 'identify' };
 
   try {
-    // ── STEP 1: Identify the caller ──────────────────────────────────────
+
+    // ── STEP 1: Welcome any caller ────────────────────────────────────────
     if (session.step === 'identify') {
-      const customer = await getCustomerByPhone(callerPhone);
+      session.step = 'select_product';
+      sessions.set(callSid, session);
 
-      if (customer) {
-        session.customer = customer;
-        session.step = 'select_product';
-        sessions.set(callSid, session);
-
-        const gather = twiml.gather({
-          input: 'speech',
-          action: '/twilio/incoming',
-          method: 'POST',
-          speechTimeout: 'auto',
-          language: 'en-US'
-        });
-        gather.say(
-          `Welcome back, ${customer.name}! This is Geoteknik technical support. ` +
-          `Which product do you need help with today?`
-        );
-      } else {
-        session.step = 'ask_phone';
-        sessions.set(callSid, session);
-
-        const gather = twiml.gather({
-          input: 'speech',
-          action: '/twilio/incoming',
-          method: 'POST',
-          speechTimeout: 'auto',
-          language: 'en-US'
-        });
-        gather.say(
-          `Welcome to Geoteknik technical support. ` +
-          `I don't recognise this number. Please say your registered phone number so I can look up your account.`
-        );
-      }
+      const gather = twiml.gather({
+        input: 'speech',
+        action: '/twilio/incoming',
+        method: 'POST',
+        speechTimeout: 'auto',
+        language: 'en-US'
+      });
+      gather.say(
+        `Welcome to Geoteknik technical support. ` +
+        `Which product do you need help with today?`
+      );
     }
 
-    // ── STEP 2: Unknown caller — look up by spoken phone number ──────────
-    else if (session.step === 'ask_phone') {
-      const customer = await getCustomerByPhone(speechResult.replace(/\s+/g, ''));
-
-      if (customer) {
-        session.customer = customer;
-        session.step = 'select_product';
-        sessions.set(callSid, session);
-
-        const gather = twiml.gather({
-          input: 'speech',
-          action: '/twilio/incoming',
-          method: 'POST',
-          speechTimeout: 'auto',
-          language: 'en-US'
-        });
-        gather.say(
-          `Thank you! I found your account, ${customer.name}. ` +
-          `Which product do you need help with today?`
-        );
-      } else {
-        twiml.say(
-          `I'm sorry, I couldn't find an account with that number. ` +
-          `Please contact us by email to register your account. Goodbye.`
-        );
-        twiml.hangup();
-        sessions.delete(callSid);
-      }
-    }
-
-    // ── STEP 3: Customer selects a product ───────────────────────────────
+    // ── STEP 2: Customer selects a product ───────────────────────────────
     else if (session.step === 'select_product') {
       session.product = speechResult;
       session.step = 'support';
@@ -106,7 +57,7 @@ router.post('/incoming', async (req, res) => {
       );
     }
 
-    // ── STEP 4: Answer the support question ──────────────────────────────
+    // ── STEP 3: Answer the support question ──────────────────────────────
     else if (session.step === 'support') {
       const userQuery = speechResult;
 
@@ -118,19 +69,19 @@ router.post('/incoming', async (req, res) => {
 
       if (wantsToEnd) {
         twiml.say(
-          `Thank you for contacting Geoteknik support. Have a great day, ${session.customer?.name || ''}!`
+          `Thank you for contacting Geoteknik support. Have a great day!`
         );
         twiml.hangup();
 
         // Save call history
         await saveCallHistory({
-          customer_id: session.customer?.id,
           phone_number: callerPhone,
           product_queried: session.product,
           summary: `Customer asked about ${session.product}`
         });
 
         sessions.delete(callSid);
+
       } else {
         // Get embedding → search manuals → get AI answer
         const embedding = await getEmbedding(userQuery);
@@ -138,7 +89,6 @@ router.post('/incoming', async (req, res) => {
         const context = manualChunks?.map(c => c.content).join('\n\n') || '';
 
         const answer = await getAIResponse(userQuery, context, {
-          ...session.customer,
           currentProduct: session.product
         });
 
