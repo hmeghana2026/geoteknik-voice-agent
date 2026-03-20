@@ -33,7 +33,7 @@ router.post('/incoming', async (req, res) => {
         language: 'en-US'
       });
       gather.say(
-        `Welcome to Geoteknik technical support. ` +
+        `Welcome to Geo-tek-nik support centre . ` +
         `Which product do you need help with today?`
       );
     }

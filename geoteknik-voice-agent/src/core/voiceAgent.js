@@ -1,6 +1,6 @@
 /**
- * Main Voice Agent
- * Orchestrates the entire call flow
+ * Main Voice Agent - Updated for Enhanced Conversation Flow
+ * Orchestrates the entire call flow with improved conversation handling
  */
 
 const logger = require('../utils/logger');
@@ -25,7 +25,10 @@ class VoiceAgent {
       logger.info(`Inbound call received: ${callId} from ${phoneNumber}`);
 
       // Create session
-      const sessionId = await this.sessionManager.createSession(phoneNumber, customerId);
+      const sessionId = await this.sessionManager.createSession(
+        phoneNumber,
+        customerId
+      );
 
       // Store callId in session
       await this.sessionManager.updateSession(sessionId, { callId });
@@ -36,17 +39,24 @@ class VoiceAgent {
       // Get initial problem statement
       const problemStatement = await this.getProblemStatement(sessionId);
 
-      // Troubleshoot
+      // Start main troubleshooting flow with enhanced features
       const result = await this.troubleshootingEngine.startTroubleshooting(
         sessionId,
         problemStatement
       );
 
-      // Handle result
+      // Handle result based on resolution and follow-ups
       if (result.resolved) {
-        await this.closeWithSatisfaction(sessionId);
+        // Customer's issue was resolved
+        if (result.hasMoreIssues) {
+          // Already handled in troubleshooting engine recursively
+          await this.finalClose(sessionId, 'resolved_multiple');
+        } else {
+          await this.closeWithSatisfaction(sessionId);
+        }
         await this.sessionManager.closeSession(sessionId, 'resolved', 5);
       } else {
+        // Could not resolve - escalate to human
         await this.escalateToHuman(sessionId, result);
         await this.sessionManager.closeSession(sessionId, 'escalated', null);
       }
@@ -90,7 +100,11 @@ class VoiceAgent {
         );
 
         if (response && response.text && response.text.trim() !== '') {
-          await this.sessionManager.addMessage(sessionId, 'customer', response.text);
+          await this.sessionManager.addMessage(
+            sessionId,
+            'customer',
+            response.text
+          );
           logger.debug(`Problem statement received: ${response.text}`);
           return response.text;
         }
@@ -103,7 +117,10 @@ class VoiceAgent {
           await this.speechService.speak(prompt);
         }
       } catch (error) {
-        logger.warn(`Listen attempt ${attempts + 1} failed:`, error.message);
+        logger.warn(
+          `Listen attempt ${attempts + 1} failed:`,
+          error.message
+        );
         attempts++;
       }
     }
@@ -130,6 +147,24 @@ class VoiceAgent {
   }
 
   /**
+   * Final close after handling multiple issues
+   */
+  async finalClose(sessionId, reason = 'resolved') {
+    try {
+      const message = `Thank you for using Geoteknik support! We're glad we could help resolve your issues. Have a great day!`;
+
+      await this.sessionManager.addMessage(sessionId, 'agent', message);
+      await this.speechService.speak(message);
+
+      logger.info(
+        `Call closed with reason ${reason} for session: ${sessionId}`
+      );
+    } catch (error) {
+      logger.error('Final close failed:', error);
+    }
+  }
+
+  /**
    * Escalate to human agent
    */
   async escalateToHuman(sessionId, result) {
@@ -151,6 +186,7 @@ class VoiceAgent {
         clarification: session.clarification,
         diagnostics: session.diagnostics,
         previousSolution: result.solution,
+        escalationReason: result.reason || 'No solution found',
       };
 
       // Escalate
@@ -183,7 +219,11 @@ class VoiceAgent {
     try {
       const session = await this.sessionManager.getSession(sessionId);
       if (session && session.status === 'active') {
-        await this.sessionManager.closeSession(sessionId, 'disconnected', null);
+        await this.sessionManager.closeSession(
+          sessionId,
+          'disconnected',
+          null
+        );
         logger.info(`Call ended for session: ${sessionId}`);
       }
     } catch (error) {
