@@ -1,15 +1,16 @@
 /**
- * Session Manager - Updated for Supabase
- * Maintains conversation context using in-memory storage
+ * Session Manager - Redis-Enabled for Real-Time
+ * Maintains conversation context with fast caching
  */
 
 const { v4: uuidv4 } = require('uuid');
 const logger = require('../utils/logger');
 
 class SessionManager {
-  constructor(sessionStore, database) {
-    this.sessions = sessionStore; // In-memory store
+  constructor(sessionStore, database, cacheService = null) {
+    this.sessions = sessionStore; // In-memory fallback
     this.database = database;
+    this.cache = cacheService; // Redis cache
   }
 
   /**
@@ -34,7 +35,14 @@ class SessionManager {
     };
 
     try {
+      // Store in memory (fallback)
       this.sessions[sessionId] = sessionData;
+
+      // Cache in Redis (primary)
+      if (this.cache) {
+        await this.cache.cacheSession(sessionId, sessionData, 3600);
+      }
+
       logger.info(`✓ Session created: ${sessionId}`);
       return sessionId;
     } catch (error) {
@@ -44,15 +52,30 @@ class SessionManager {
   }
 
   /**
-   * Get session
+   * Get session (Redis-first, then fallback)
    */
   async getSession(sessionId) {
     try {
+      // Try Redis first for performance
+      if (this.cache) {
+        const cached = await this.cache.getCachedSession(sessionId);
+        if (cached) {
+          return cached;
+        }
+      }
+
+      // Fallback to memory
       const session = this.sessions[sessionId];
       if (!session) {
         logger.warn(`Session not found: ${sessionId}`);
         return null;
       }
+
+      // Re-cache if it was missing from Redis
+      if (this.cache) {
+        await this.cache.cacheSession(sessionId, session, 3600);
+      }
+
       return session;
     } catch (error) {
       logger.error('Failed to retrieve session:', error);
@@ -61,7 +84,7 @@ class SessionManager {
   }
 
   /**
-   * Update session
+   * Update session (fast path with cache)
    */
   async updateSession(sessionId, updates) {
     try {
@@ -70,13 +93,20 @@ class SessionManager {
         throw new Error(`Session not found: ${sessionId}`);
       }
 
-      this.sessions[sessionId] = {
+      const updated = {
         ...session,
         ...updates,
         lastUpdated: Date.now(),
       };
 
-      return this.sessions[sessionId];
+      // Update both stores for consistency
+      this.sessions[sessionId] = updated;
+
+      if (this.cache) {
+        await this.cache.cacheSession(sessionId, updated, 3600);
+      }
+
+      return updated;
     } catch (error) {
       logger.error('Failed to update session:', error);
       throw error;
@@ -101,6 +131,13 @@ class SessionManager {
       });
 
       this.sessions[sessionId] = session;
+
+      // Update cache asynchronously (don't wait)
+      if (this.cache) {
+        this.cache.cacheSession(sessionId, session, 3600).catch((err) => {
+          logger.warn('Failed to update cache on message add:', err);
+        });
+      }
     } catch (error) {
       logger.error('Failed to add message:', error);
     }
@@ -118,6 +155,11 @@ class SessionManager {
 
       session.silenceCount += 1;
       this.sessions[sessionId] = session;
+
+      if (this.cache) {
+        await this.cache.cacheSession(sessionId, session, 3600);
+      }
+
       return session.silenceCount;
     } catch (error) {
       logger.error('Failed to increment silence count:', error);
@@ -134,6 +176,10 @@ class SessionManager {
       if (session) {
         session.silenceCount = 0;
         this.sessions[sessionId] = session;
+
+        if (this.cache) {
+          await this.cache.cacheSession(sessionId, session, 3600);
+        }
       }
     } catch (error) {
       logger.error('Failed to reset silence count:', error);
@@ -156,6 +202,10 @@ class SessionManager {
       };
 
       this.sessions[sessionId] = session;
+
+      if (this.cache) {
+        await this.cache.cacheSession(sessionId, session, 3600);
+      }
     } catch (error) {
       logger.error('Failed to update clarification:', error);
     }
@@ -200,6 +250,11 @@ class SessionManager {
 
       // Remove from memory
       delete this.sessions[sessionId];
+
+      // Remove from cache
+      if (this.cache) {
+        await this.cache.delete(`session:${sessionId}`);
+      }
 
       logger.info(
         `✓ Session closed: ${sessionId} (${duration}ms, Status: ${resolutionStatus})`
