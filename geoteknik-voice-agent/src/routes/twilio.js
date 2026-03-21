@@ -56,6 +56,7 @@ const sessions = new Map();
  * @property {boolean}  validationDone
  */
 
+readyAsked: false,
 function newSession(callerPhone) {
   return {
     step               : 'greet',
@@ -690,24 +691,35 @@ router.post('/incoming', async (req, res) => {
 
     // ── RESOLUTION INTRO ─────────────────────────────────────────────
     case 'resolve_intro': {
-      // Check for interrupt — user may want something different
-      if (s.pendingInterrupt) {
-        const pi       = s.pendingInterrupt;
-        s.pendingInterrupt = '';
-        sessions.set(callSid, s);
-        sayAndListen(twiml, `Got it, let me focus on that. ${cap30(pi)} — say more?`, 20);
-        break;
-      }
-      const total = s.steps.length;
-      const src   = s.kbSource === 'manual' ? 'our product manual' : 'our knowledge base';
-      s.step = 'resolve_step';
-      sessions.set(callSid, s);
-      sayAndListen(twiml,
-        `Found a solution in ${src}. ${total} step${total > 1 ? 's' : ''} — let's go. Say "ready" to start.`,
-        20
-      );
-      break;
-    }
+  // Check for interrupt — user may want something different
+  if (s.pendingInterrupt) {
+    const pi       = s.pendingInterrupt;
+    s.pendingInterrupt = '';
+    sessions.set(callSid, s);
+    sayAndListen(twiml, `Got it, let me focus on that. ${cap30(pi)} — say more?`, 20);
+    break;
+  }
+  
+  // First time: ask if ready
+  if (!s.readyAsked) {
+    s.readyAsked = true;
+    const total = s.steps.length;
+    const src   = s.kbSource === 'manual' ? 'our product manual' : 'our knowledge base';
+    sessions.set(callSid, s);
+    sayAndListen(twiml,
+      `Found a solution in ${src}. ${total} step${total > 1 ? 's' : ''} — let's go. Say "ready" to start.`,
+      20
+    );
+    break;
+  }
+  
+  // Second time: caller said "ready" or similar → move to resolve_step
+  s.readyAsked = false;
+  s.step = 'resolve_step';
+  sessions.set(callSid, s);
+  twiml.redirect('/twilio/incoming');
+  break;
+}
 
     // ── READ A STEP ───────────────────────────────────────────────────
     case 'resolve_step': {
@@ -791,6 +803,7 @@ router.post('/incoming', async (req, res) => {
     }
 
     case 'post_resolve': {
+      s.readyAsked = false;
       if (isYes(speech) || /more|another|also|yes/i.test(speech)) {
         // Reset for new issue, keep name + phone
         s.step      = 'get_issue';
