@@ -38,7 +38,7 @@ const sessions = new Map();
  * @property {string}   status
  * @property {string}   callerPhone
  * @property {string}   callerName
- * @property {string}   product          — e.g. "drone", "gps", "license"
+ * @property {string}   product
  * @property {string}   issueType        — 'license_activation' | 'report_generation' | 'general'
  * @property {string}   projectId
  * @property {string}   licenseKey
@@ -52,11 +52,10 @@ const sessions = new Map();
  * @property {string}   kbSource
  * @property {Array}    history
  * @property {boolean}  emotionAcknowledged
- * @property {string}   pendingInterrupt   — speech captured mid-flow
+ * @property {string}   pendingInterrupt
  * @property {boolean}  validationDone
+ * @property {boolean}  readyAsked
  */
-
-readyAsked: false,
 function newSession(callerPhone) {
   return {
     step               : 'greet',
@@ -79,49 +78,58 @@ function newSession(callerPhone) {
     emotionAcknowledged: false,
     pendingInterrupt   : '',
     validationDone     : false,
+    readyAsked         : false,   // ← fixed: was floating outside the function
   };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIMULATED TOOL CALLS  (demo/POC stubs)
+// SIMULATED TOOL CALLS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** @returns {{ valid: boolean, message: string }} */
+/** check_license_status — any 4+ char project ID is "found" */
 function tool_check_license_status(projectId) {
-  // Simulate: any 6+ char project ID is "found"
   const found = projectId && projectId.replace(/\s/g, '').length >= 4;
   return {
     valid  : found,
-    message: found ? 'Project record located.' : 'Project ID not found in registry.',
+    message: found
+      ? 'Project record located in registry.'
+      : 'Project ID not found in registry.',
   };
 }
 
-/** @returns {{ valid: boolean, message: string }} */
+/** validate_license_key — keys containing a dash are valid */
 function tool_validate_license_key(licenseKey) {
-  // Simulate: keys containing a dash are valid
   const valid = licenseKey && licenseKey.includes('-');
   return {
     valid,
-    message: valid ? 'License key format verified.' : 'License key format invalid.',
+    message: valid
+      ? 'License key format verified.'
+      : 'License key format invalid — must contain a dash separator.',
   };
 }
 
-/** @returns {{ success: boolean, message: string }} */
+/** activate_license — always succeeds in demo */
 function tool_activate_license(projectId, licenseKey) {
-  return { success: true, message: 'License activated successfully.' };
+  return {
+    success: true,
+    message: `License activated for project ${projectId}.`,
+  };
 }
 
-/** @returns {{ status: string, message: string }} */
+/** check_report_status — simulates a stalled engine */
 function tool_check_report_status(projectId) {
-  return { status: 'stalled', message: 'Report engine stalled on last run.' };
+  return {
+    status : 'stalled',
+    message: 'Report engine stalled on last run — restart required.',
+  };
 }
 
-/** @returns {{ valid: boolean, version: string }} */
+/** validate_project_data */
 function tool_validate_project_data(projectId) {
   return { valid: true, version: '4.2.1' };
 }
 
-/** @returns {{ success: boolean }} */
+/** restart_report_engine */
 function tool_restart_report_engine(projectId) {
   return { success: true };
 }
@@ -136,10 +144,9 @@ function tool_restart_report_engine(projectId) {
  * @returns {'license_activation'|'report_generation'|'general'}
  */
 function classifyIssue(text = '') {
-  const t = text.toLowerCase();
-  if (/licen[sc]|404.?l|activation|activate|key|unlock/i.test(t))
+  if (/licen[sc]|404.?l|activation|activate|key|unlock/i.test(text))
     return 'license_activation';
-  if (/report|generat|soil|stabilit|won.?t generate|failed to create/i.test(t))
+  if (/report|generat|soil|stabilit|won.?t generate|failed to create/i.test(text))
     return 'report_generation';
   return 'general';
 }
@@ -162,7 +169,7 @@ function isFrustrated(text = '') {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HELPER: Extract fields from speech
+// HELPERS: Extract fields from speech
 // ─────────────────────────────────────────────────────────────────────────────
 
 function extractName(t = '') {
@@ -174,7 +181,6 @@ function extractName(t = '') {
 }
 
 function extractProjectId(t = '') {
-  // Match patterns like "PRJ-1234", "project 5678", plain numbers 4-10 digits
   const patterns = [
     /\b([A-Z]{2,5}[-_]\d{3,8})\b/i,
     /project\s+(?:id\s+)?([A-Z0-9\-]{4,12})/i,
@@ -188,7 +194,6 @@ function extractProjectId(t = '') {
 }
 
 function extractLicenseKey(t = '') {
-  // Match "XXXX-XXXX-XXXX" style or anything with a dash
   const m = t.match(/([A-Z0-9]{4,8}(?:[-\s][A-Z0-9]{4,8}){1,4})/i);
   if (m) return m[1].replace(/\s/g, '-').toUpperCase();
   return t.replace(/[^A-Za-z0-9\-]/g, '').toUpperCase().slice(0, 24) || '';
@@ -216,24 +221,27 @@ function isNo(t = '') {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VOICE HELPERS  (≤30-word constraint enforced at say-time)
+// VOICE HELPERS  (≤30-word constraint enforced here)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const VOICE = { voice: 'Polly.Joanna' };
 const LANG  = 'en-US';
 
 /**
- * Hard-cap speech to ≤30 words for voice-first rule.
- * Truncates cleanly at sentence boundary or word boundary.
+ * Hard-cap speech to ≤30 words.
+ * Truncates cleanly at sentence or word boundary.
  */
 function cap30(text = '') {
   const words = text.trim().split(/\s+/);
   if (words.length <= 30) return text.trim();
-  // Try to end at a sentence within 30 words
-  const sentence = words.slice(0, 30).join(' ');
-  const lastPeriod = sentence.lastIndexOf('.');
-  const lastComma  = sentence.lastIndexOf(',');
-  const cut = lastPeriod > 15 ? lastPeriod + 1 : lastComma > 15 ? lastComma + 1 : sentence.length;
+  const sentence    = words.slice(0, 30).join(' ');
+  const lastPeriod  = sentence.lastIndexOf('.');
+  const lastComma   = sentence.lastIndexOf(',');
+  const cut = lastPeriod > 15
+    ? lastPeriod + 1
+    : lastComma > 15
+      ? lastComma + 1
+      : sentence.length;
   return sentence.slice(0, cut).trim();
 }
 
@@ -248,7 +256,7 @@ function buildGather(twiml, timeout = 12) {
   });
 }
 
-/** Say text (≤30 words) then listen */
+/** Say ≤30-word text then listen */
 function sayAndListen(twiml, text, timeout = 12) {
   const safe = cap30(text);
   const g    = buildGather(twiml, timeout);
@@ -256,7 +264,7 @@ function sayAndListen(twiml, text, timeout = 12) {
   twiml.redirect('/twilio/incoming');
 }
 
-/** Say text (≤30 words) then hang up */
+/** Say ≤30-word text then hang up */
 function sayAndHang(twiml, text) {
   twiml.say(VOICE, cap30(text));
   twiml.hangup();
@@ -318,32 +326,34 @@ async function closeSession(callSid, s, outcome) {
 async function getShortDiagnosticQuestion(s, lastSpeech, round) {
   try {
     const prompt =
-      `You are Geoteknik-Support, a voice agent. ` +
-      `Issue type: ${s.issueType}. Product: ${s.product}. ` +
-      `Caller said: "${lastSpeech}". Symptoms: ${s.symptoms.join('; ')}. ` +
+      `You are Geoteknik-Support, a voice agent for Geotechnical Engineering Software. ` +
+      `Issue type: ${s.issueType}. Product: ${s.product || 'Geoteknik Software'}. ` +
+      `Caller said: "${lastSpeech}". Symptoms so far: ${s.symptoms.join('; ')}. ` +
       `Ask ONE short follow-up diagnostic question. ` +
       `STRICT RULES: maximum 20 words, conversational, no bullet points, no markdown.`;
     const q = await getAIResponse(prompt, '', { currentProduct: s.product });
     if (q && q.trim().length > 5) return cap30(q.trim());
   } catch (_) {}
 
+  // Fallbacks per domain
   const fallbacks = {
-    license_activation : [
+    license_activation: [
       `When exactly did the License 404-L error appear?`,
       `Have you activated this license on another machine before?`,
       `Did anything change on your system recently?`,
     ],
-    report_generation  : [
+    report_generation: [
       `Which report type fails — soil stability or another?`,
       `What version of the software are you running?`,
       `Does the error show a specific code or message?`,
     ],
-    general            : [
-      `How long has this been happening?`,
+    general: [
+      `How long has this issue been happening?`,
       `Have you made any recent changes to your setup?`,
       `What exactly appears on screen when it fails?`,
     ],
   };
+
   const list = fallbacks[s.issueType] || fallbacks.general;
   return list[Math.min(round - 1, list.length - 1)];
 }
@@ -358,38 +368,43 @@ router.post('/incoming', async (req, res) => {
   const callerPhone = req.body.From || 'unknown';
   const speech      = (req.body.SpeechResult || '').trim();
 
-  let s = sessions.get(callSid) || newSession(callerPhone);
+  // Initialise or retrieve session
+  if (!sessions.has(callSid)) sessions.set(callSid, newSession(callerPhone));
+  let s = sessions.get(callSid);
+
   console.log(`[${callSid}] step=${s.step} speech="${speech.slice(0, 60)}"`);
 
-  // ── GLOBAL: Interruption / Pivot ──────────────────────────────────────
-  // If the user speaks during a non-interactive step, store it and pivot
+  // ── GLOBAL: Interruption — store and let current step handle it ───────
   if (speech && ['kb_searching', 'tool_validating', 'create_ticket'].includes(s.step)) {
     s.pendingInterrupt = speech;
     sessions.set(callSid, s);
-    // Let the step finish; it will check pendingInterrupt below
   }
 
-  // ── GLOBAL: Frustration → empathy first ───────────────────────────────
+  // ── GLOBAL: Frustration → empathy BEFORE troubleshooting ─────────────
+  // Rule: Adaptive Empathy — acknowledge emotions first
   if (speech && isFrustrated(speech) && !s.emotionAcknowledged) {
     s.emotionAcknowledged = true;
-    s.pendingInterrupt    = speech; // remember what they said
+    s.pendingInterrupt    = speech;
     sessions.set(callSid, s);
     sayAndListen(twiml,
-      `I completely understand your frustration — I'm here to fix this for you right now. What's the main issue?`,
+      `I completely understand your frustration — I'm here to fix this right now. What's the main issue?`,
       20
     );
     return send(res, twiml);
   }
 
   // ── GLOBAL: Explicit human request ────────────────────────────────────
-  if (speech && /speak to a human|real person|agent|representative|supervisor|manager/i.test(speech)
-      && s.step !== 'connect_human') {
+  if (
+    speech &&
+    /speak to a human|real person|agent|representative|supervisor|manager/i.test(speech) &&
+    s.step !== 'connect_human'
+  ) {
     s.step   = 'connect_human';
     s.status = 'escalating';
     sessions.set(callSid, s);
   }
 
-  // ── GLOBAL: Double-silence protection ─────────────────────────────────
+  // ── GLOBAL: Silence protection ────────────────────────────────────────
   if (!speech && !['greet', 'kb_searching', 'tool_validating', 'create_ticket'].includes(s.step)) {
     s.silenceCount = (s.silenceCount || 0) + 1;
     sessions.set(callSid, s);
@@ -398,6 +413,7 @@ router.post('/incoming', async (req, res) => {
       sayAndListen(twiml, `I didn't catch that — could you say that again?`);
       return send(res, twiml);
     }
+    // Second silence — offer human fallback
     s.silenceCount = 0;
     sessions.set(callSid, s);
     sayAndListen(twiml,
@@ -409,17 +425,18 @@ router.post('/incoming', async (req, res) => {
   if (speech) s.silenceCount = 0;
 
   // ─────────────────────────────────────────────────────────────────────
-  // FSM
+  // FSM — each case maps to one logical step
   // ─────────────────────────────────────────────────────────────────────
   switch (s.step) {
 
     // ── 1. GREET ──────────────────────────────────────────────────────
+    // Rule: Agent greets user and establishes context within 15 seconds
     case 'greet': {
       s.step = 'get_name';
       sessions.set(callSid, s);
-      // Verbal cue 1: warm open, ≤30 words
+      // Verbal cue 1 of 3 minimum
       sayAndListen(twiml,
-        `Hi, thanks for calling Geoteknik Support. I'm Alex. May I have your first name, please?`,
+        `Hi, thanks for calling Geoteknik Support. I'm Alex. May I have your first name?`,
         15
       );
       break;
@@ -430,17 +447,17 @@ router.post('/incoming', async (req, res) => {
       s.callerName = extractName(speech) || cap(speech.split(' ')[0]) || 'there';
       s.step       = 'get_issue';
       sessions.set(callSid, s);
-      // Verbal cue: acknowledge name
+      // Verbal cue: active listening — repeat name back
       sayAndListen(twiml,
-        `Got it, ${s.callerName}. What issue are you experiencing today? Please describe it briefly.`,
+        `Got it, ${s.callerName}. What issue are you experiencing today? Describe it briefly.`,
         20
       );
       break;
     }
 
     // ── 3. GET ISSUE (classify domain) ────────────────────────────────
+    // Rule: Proactive Data Collection — route to ID/key collection immediately
     case 'get_issue': {
-      // Handle interruption carry-over
       const effectiveSpeech = s.pendingInterrupt || speech;
       s.pendingInterrupt    = '';
 
@@ -448,35 +465,34 @@ router.post('/incoming', async (req, res) => {
       s.symptoms.push(effectiveSpeech);
       s.history.push({ role: 'caller', text: effectiveSpeech });
 
-      // Extract product if mentioned
+      // Determine product label
       if (!s.product) {
-        if (/licen[sc]|software|activat/i.test(effectiveSpeech)) s.product = 'Geoteknik Software';
+        if (/licen[sc]|software|activat/i.test(effectiveSpeech))  s.product = 'Geoteknik Software';
         else if (/report|soil|stabilit/i.test(effectiveSpeech))   s.product = 'Report Engine';
-        else if (/drone|uav/i.test(effectiveSpeech))               s.product = 'drone';
-        else if (/gps|gnss/i.test(effectiveSpeech))                s.product = 'GPS receiver';
-        else if (/total station/i.test(effectiveSpeech))           s.product = 'total station';
-        else s.product = 'Geoteknik equipment';
+        else                                                        s.product = 'Geoteknik Software';
       }
 
-      // Route: License or Report → proactive data collection
       if (s.issueType === 'license_activation') {
         s.step = 'get_project_id';
         sessions.set(callSid, s);
-        // Verbal cue: "I see"
+        // Verbal cue: "I see" + pivot to data collection
         sayAndListen(twiml,
           `I see — a license activation issue. Let me look that up. What's your Project ID?`,
           20
         );
+
       } else if (s.issueType === 'report_generation') {
         s.step = 'get_project_id';
         sessions.set(callSid, s);
+        // Verbal cue: "Understood"
         sayAndListen(twiml,
           `Understood — report generation failure. I'll check that now. What's your Project ID?`,
           20
         );
+
       } else {
-        // General / hardware — go straight to diagnosis
-        s.step     = 'diagnose_1';
+        // General — run short diagnosis then KB search
+        s.step      = 'diagnose_1';
         s.diagRound = 1;
         sessions.set(callSid, s);
         const q = await getShortDiagnosticQuestion(s, effectiveSpeech, 1);
@@ -486,11 +502,12 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── 4. PROJECT ID ─────────────────────────────────────────────────
+    // Rule: Collect Project ID and License Key early, without sounding robotic
     case 'get_project_id': {
       s.projectId = extractProjectId(speech) || speech.slice(0, 20).toUpperCase();
       s.step      = 'get_license_key';
       sessions.set(callSid, s);
-      // Verbal cue: repeat back to confirm (active listening)
+      // Verbal cue: repeat back (active listening rule)
       sayAndListen(twiml,
         `Got it — Project ID ${s.projectId}. And your license key, please?`,
         20
@@ -503,20 +520,21 @@ router.post('/incoming', async (req, res) => {
       s.licenseKey = extractLicenseKey(speech) || speech.slice(0, 24).toUpperCase();
       s.step       = 'tool_validating';
       sessions.set(callSid, s);
-      // Verbal cue: "Let me check that"
+      // Verbal cue: "Let me check that" — simulate real-time lookup
       sayAndListen(twiml,
         `Let me check that — validating your project and license now. One moment.`,
-        3  // short; we redirect immediately
+        3
       );
       break;
     }
 
     // ── 6. TOOL VALIDATION (simulated) ───────────────────────────────
+    // Rule: Validate license/project before offering solutions
     case 'tool_validating': {
-      console.log(`[TOOL] check_license_status(${s.projectId})`);
+      console.log(`[TOOL] check_license_status("${s.projectId}")`);
       const projectCheck = tool_check_license_status(s.projectId);
 
-      console.log(`[TOOL] validate_license_key(${s.licenseKey})`);
+      console.log(`[TOOL] validate_license_key("${s.licenseKey}")`);
       const licenseCheck = tool_validate_license_key(s.licenseKey);
 
       s.validationDone = true;
@@ -535,20 +553,17 @@ router.post('/incoming', async (req, res) => {
         break;
       }
 
-      // Both valid — route to domain resolution
-      if (s.issueType === 'license_activation') {
-        s.step = 'resolve_license';
-      } else if (s.issueType === 'report_generation') {
-        s.step = 'resolve_report';
-      } else {
-        s.step = 'kb_searching';
-      }
+      // Both valid — route by domain
+      if (s.issueType === 'license_activation')   s.step = 'resolve_license';
+      else if (s.issueType === 'report_generation') s.step = 'resolve_report';
+      else                                          s.step = 'kb_searching';
+
       sessions.set(callSid, s);
       twiml.redirect('/twilio/incoming');
       break;
     }
 
-    // ── 6a. VALIDATION FAILED ─────────────────────────────────────────
+    // ── 6a. PROJECT ID NOT FOUND ──────────────────────────────────────
     case 'validation_failed': {
       s.step = 'get_email';
       sessions.set(callSid, s);
@@ -572,27 +587,25 @@ router.post('/incoming', async (req, res) => {
 
     case 'retry_license_key': {
       const key2 = extractLicenseKey(speech);
-      if (key2) {
-        s.licenseKey = key2;
-        s.step       = 'tool_validating';
-      } else {
-        // Escalate
-        s.step = 'get_email';
-      }
+      s.licenseKey = key2 || speech.slice(0, 24).toUpperCase();
+      // Give one retry then escalate if still no dash
+      s.step = key2 ? 'tool_validating' : 'get_email';
       sessions.set(callSid, s);
       twiml.redirect('/twilio/incoming');
       break;
     }
 
-    // ── 7. RESOLVE LICENSE ACTIVATION ────────────────────────────────
+    // ── 7. RESOLVE: LICENSE ACTIVATION ───────────────────────────────
+    // Rule: check_license_status → validate_license_key → activate_license
     case 'resolve_license': {
-      console.log(`[TOOL] activate_license(${s.projectId}, ${s.licenseKey})`);
+      console.log(`[TOOL] activate_license("${s.projectId}", "${s.licenseKey}")`);
       const activation = tool_activate_license(s.projectId, s.licenseKey);
 
+      // Step-by-step fix (Rule: Break fixes into numbered simple steps)
       s.steps = [
         `Open Geoteknik software and go to Help, then License Manager.`,
         `Click "Deactivate" to reset any stale activation, then click "Activate."`,
-        `Enter your license key exactly as provided. Use copy-paste if possible.`,
+        `Enter your license key exactly as provided — use copy-paste if possible.`,
         `Restart the software. Your license should now show as Active.`,
       ];
       s.stepIndex = 0;
@@ -601,32 +614,34 @@ router.post('/incoming', async (req, res) => {
 
       const msg = activation.success
         ? `I see your license is ready to activate. I have four quick steps — say "ready" to begin.`
-        : `Let me walk you through a manual activation. Say "ready" when you're at your computer.`;
+        : `Let me walk you through a manual activation. Say "ready" when at your computer.`;
       sayAndListen(twiml, msg, 20);
       break;
     }
 
-    // ── 8. RESOLVE REPORT ENGINE ─────────────────────────────────────
+    // ── 8. RESOLVE: REPORT GENERATION ────────────────────────────────
+    // Rule: check_report_status → validate_project_data → restart_report_engine
     case 'resolve_report': {
-      console.log(`[TOOL] check_report_status(${s.projectId})`);
+      console.log(`[TOOL] check_report_status("${s.projectId}")`);
       const reportStatus = tool_check_report_status(s.projectId);
 
-      console.log(`[TOOL] validate_project_data(${s.projectId})`);
+      console.log(`[TOOL] validate_project_data("${s.projectId}")`);
       const dataCheck = tool_validate_project_data(s.projectId);
 
-      console.log(`[TOOL] restart_report_engine(${s.projectId})`);
+      console.log(`[TOOL] restart_report_engine("${s.projectId}")`);
       tool_restart_report_engine(s.projectId);
 
       s.steps = [
-        `Go to Tools in the menu bar, then select Report Engine, then click Restart.`,
-        `Wait 30 seconds for the engine to reinitialize — you'll see a green status indicator.`,
+        `Go to Tools in the menu bar, then Report Engine, then click Restart.`,
+        `Wait 30 seconds for the engine to reinitialize — watch for the green status indicator.`,
         `Open your project and select Generate Report again.`,
-        `If the same error appears, clear the report cache under Tools, then Options, then Clear Cache.`,
+        `If the same error appears, clear the cache under Tools, then Options, then Clear Cache.`,
       ];
       s.stepIndex = 0;
       s.step      = 'resolve_intro';
       sessions.set(callSid, s);
 
+      // Verbal cue: "Understood" + real-time check impression
       sayAndListen(twiml,
         `Understood — I've run a remote check. The report engine needs a restart. Say "ready" to begin.`,
         20
@@ -634,10 +649,10 @@ router.post('/incoming', async (req, res) => {
       break;
     }
 
-    // ── (Internal) KB SEARCH for general issues ───────────────────────
+    // ── KB SEARCH for general issues ──────────────────────────────────
     case 'kb_searching': {
-      const query      = `${s.product} ${s.symptoms.join(' ')}`;
-      const result     = await searchKnowledgeBase(query);
+      const query  = `${s.product} ${s.symptoms.join(' ')}`;
+      const result = await searchKnowledgeBase(query);
 
       if (result.steps.length > 0) {
         s.steps     = result.steps;
@@ -654,7 +669,7 @@ router.post('/incoming', async (req, res) => {
       break;
     }
 
-    // ── DIAGNOSIS ROUNDS (general issues only) ────────────────────────
+    // ── DIAGNOSIS ROUNDS (general issues) ────────────────────────────
     case 'diagnose_1':
     case 'diagnose_2':
     case 'diagnose_3': {
@@ -680,7 +695,7 @@ router.post('/incoming', async (req, res) => {
         s.step   = 'kb_searching';
         s.status = 'resolving';
         sessions.set(callSid, s);
-        // Verbal cue: "Let me check that"
+        // Verbal cue: "Let me check that" — knowledge base lookup
         sayAndListen(twiml,
           `Got it — let me check that against our technical database. One moment.`,
           3
@@ -690,40 +705,44 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── RESOLUTION INTRO ─────────────────────────────────────────────
+    // Rule: Step-by-Step Resolution — announce steps, wait for "ready"
     case 'resolve_intro': {
-  // Check for interrupt — user may want something different
-  if (s.pendingInterrupt) {
-    const pi       = s.pendingInterrupt;
-    s.pendingInterrupt = '';
-    sessions.set(callSid, s);
-    sayAndListen(twiml, `Got it, let me focus on that. ${cap30(pi)} — say more?`, 20);
-    break;
-  }
-  
-  // First time: ask if ready
-  if (!s.readyAsked) {
-    s.readyAsked = true;
-    const total = s.steps.length;
-    const src   = s.kbSource === 'manual' ? 'our product manual' : 'our knowledge base';
-    sessions.set(callSid, s);
-    sayAndListen(twiml,
-      `Found a solution in ${src}. ${total} step${total > 1 ? 's' : ''} — let's go. Say "ready" to start.`,
-      20
-    );
-    break;
-  }
-  
-  // Second time: caller said "ready" or similar → move to resolve_step
-  s.readyAsked = false;
-  s.step = 'resolve_step';
-  sessions.set(callSid, s);
-  twiml.redirect('/twilio/incoming');
-  break;
-}
+      // Interruption — pivot immediately (Interruption Handling rule)
+      if (s.pendingInterrupt) {
+        const pi       = s.pendingInterrupt;
+        s.pendingInterrupt = '';
+        sessions.set(callSid, s);
+        sayAndListen(twiml,
+          `Got it, let me focus on that. ${cap30(pi)} — say more?`,
+          20
+        );
+        break;
+      }
+
+      if (!s.readyAsked) {
+        // First pass: tell caller how many steps, invite them to start
+        s.readyAsked = true;
+        const total  = s.steps.length;
+        const src    = s.kbSource === 'manual' ? 'our product manual' : 'our knowledge base';
+        sessions.set(callSid, s);
+        sayAndListen(twiml,
+          `Found a solution in ${src}. ${total} step${total > 1 ? 's' : ''} — say "ready" to start.`,
+          20
+        );
+        break;
+      }
+
+      // Caller said "ready" — move to first step
+      s.readyAsked = false;
+      s.step       = 'resolve_step';
+      sessions.set(callSid, s);
+      twiml.redirect('/twilio/incoming');
+      break;
+    }
 
     // ── READ A STEP ───────────────────────────────────────────────────
     case 'resolve_step': {
-      // Interruption mid-step: pivot immediately
+      // Interruption mid-step: pivot immediately (Interruption Handling rule)
       if (s.pendingInterrupt) {
         const pi           = s.pendingInterrupt;
         s.pendingInterrupt = '';
@@ -751,7 +770,7 @@ router.post('/incoming', async (req, res) => {
 
     // ── CHECK STEP RESULT ─────────────────────────────────────────────
     case 'resolve_check': {
-      // User interrupts with new question
+      // Interrupted with a new question — pivot (Interruption Handling rule)
       if (s.pendingInterrupt && !isYes(speech) && !isNo(speech)) {
         const pi           = s.pendingInterrupt;
         s.pendingInterrupt = '';
@@ -761,6 +780,7 @@ router.post('/incoming', async (req, res) => {
       }
 
       if (isYes(speech)) {
+        // Rule: User confirms resolution
         s.step   = 'resolved';
         s.status = 'closed';
         sessions.set(callSid, s);
@@ -771,9 +791,7 @@ router.post('/incoming', async (req, res) => {
         if (s.stepIndex < s.steps.length) {
           s.step = 'resolve_step';
           sessions.set(callSid, s);
-          sayAndListen(twiml,
-            `No problem — let's try the next step.`
-          );
+          sayAndListen(twiml, `No problem — let's try the next step.`);
         } else {
           s.step   = 'steps_exhausted';
           s.status = 'escalating';
@@ -781,7 +799,7 @@ router.post('/incoming', async (req, res) => {
           twiml.redirect('/twilio/incoming');
         }
       } else {
-        // Ambiguous — use verbal cue
+        // Ambiguous — ask for confirmation (Active Listening rule)
         sayAndListen(twiml,
           `Understood — is the issue fully resolved, or still occurring?`,
           15
@@ -791,10 +809,10 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── ISSUE RESOLVED ✅ ─────────────────────────────────────────────
+    // Rule: User confirms resolution — warm close, offer more help
     case 'resolved': {
       s.step = 'post_resolve';
       sessions.set(callSid, s);
-      // Verbal cue: wrap warmly, ask about anything else
       sayAndListen(twiml,
         `Excellent — I'm really glad we sorted that, ${s.callerName}. Anything else I can help with today?`,
         15
@@ -805,17 +823,20 @@ router.post('/incoming', async (req, res) => {
     case 'post_resolve': {
       s.readyAsked = false;
       if (isYes(speech) || /more|another|also|yes/i.test(speech)) {
-        // Reset for new issue, keep name + phone
-        s.step      = 'get_issue';
-        s.issueType = '';
-        s.product   = '';
-        s.symptoms  = [];
-        s.diagRound = 0;
-        s.steps     = [];
-        s.stepIndex = 0;
-        s.projectId = '';
-        s.licenseKey= '';
-        s.validationDone = false;
+        // Reset for a new issue, keep name + phone
+        Object.assign(s, {
+          step     : 'get_issue',
+          issueType: '',
+          product  : '',
+          symptoms : [],
+          diagRound: 0,
+          steps    : [],
+          stepIndex: 0,
+          projectId: '',
+          licenseKey: '',
+          validationDone: false,
+          readyAsked: false,
+        });
         sessions.set(callSid, s);
         sayAndListen(twiml, `Of course — what else can I help you with?`);
       } else {
@@ -827,10 +848,10 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── NO KB RESULT ──────────────────────────────────────────────────
+    // Rule: Graceful knowledge gap — "That's a great question — let me escalate"
     case 'no_kb_result': {
       s.step = 'get_email';
       sessions.set(callSid, s);
-      // Verbal cue: graceful knowledge gap
       sayAndListen(twiml,
         `That's a great question — let me escalate this to our specialist team. What's your email?`,
         20
@@ -838,7 +859,7 @@ router.post('/incoming', async (req, res) => {
       break;
     }
 
-    // ── STEPS EXHAUSTED ───────────────────────────────────────────────
+    // ── ALL STEPS EXHAUSTED ───────────────────────────────────────────
     case 'steps_exhausted': {
       s.step = 'get_email';
       sessions.set(callSid, s);
@@ -865,10 +886,11 @@ router.post('/incoming', async (req, res) => {
       s.step         = 'ticket_confirm';
       sessions.set(callSid, s);
 
-      const smsBody =
-        `Geoteknik Support: Ticket ${ticketId} created. ` +
-        `A specialist will contact you within 4 business hours.`;
-      sendSMS(s.callerPhone, smsBody);
+      // Send SMS with ticket reference (non-blocking)
+      sendSMS(
+        s.callerPhone,
+        `Geoteknik Support: Ticket ${ticketId} created. A specialist will contact you within 4 business hours.`
+      );
 
       twiml.redirect('/twilio/incoming');
       break;
@@ -888,13 +910,16 @@ router.post('/incoming', async (req, res) => {
 
     case 'post_ticket': {
       if (isYes(speech) || /more|another|also|yes/i.test(speech)) {
-        s.step      = 'get_issue';
-        s.issueType = '';
-        s.product   = '';
-        s.symptoms  = [];
-        s.diagRound = 0;
-        s.steps     = [];
-        s.stepIndex = 0;
+        Object.assign(s, {
+          step     : 'get_issue',
+          issueType: '',
+          product  : '',
+          symptoms : [],
+          diagRound: 0,
+          steps    : [],
+          stepIndex: 0,
+          readyAsked: false,
+        });
         sessions.set(callSid, s);
         sayAndListen(twiml, `Of course — what else can I help you with?`);
       } else {
@@ -906,6 +931,7 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── CONNECT TO HUMAN ──────────────────────────────────────────────
+    // Rule: Explicit human request — warm transfer, don't resist
     case 'connect_human': {
       sayAndHang(twiml,
         `I understand — connecting you to a senior specialist now. Please hold, ${s.callerName}.`
@@ -923,8 +949,9 @@ router.post('/incoming', async (req, res) => {
       break;
     }
 
+    // ── UNKNOWN STEP (safety net) ─────────────────────────────────────
     default: {
-      console.error(`[${callSid}] Unknown step: ${s.step} — resetting`);
+      console.error(`[${callSid}] Unknown step: ${s.step} — resetting to greet`);
       s.step = 'greet';
       sessions.set(callSid, s);
       twiml.redirect('/twilio/incoming');

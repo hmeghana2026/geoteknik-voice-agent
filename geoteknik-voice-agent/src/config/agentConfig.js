@@ -1,86 +1,143 @@
 /**
- * Agent Configuration
- * Centralized configuration for voice agent behavior
+ * src/config/agentConfig.js
+ * =========================
+ * Centralised configuration for the Geoteknik Voice Agent.
+ *
+ * Agent identity: Geoteknik-Support
+ * Domain: Geotechnical Engineering Software
+ * Interaction target: ≤ 2 minutes, all responses ≤ 30 words
  */
 
 require('dotenv').config();
 
 const agentConfig = {
-  // Twilio Configuration
+
+  // ── Identity ─────────────────────────────────────────────────────────
+  identity: {
+    name        : 'Geoteknik-Support',
+    callsignName: 'Alex',                    // name used in greetings
+    domain      : 'Geotechnical Engineering Software',
+    voicePersona: 'Polly.Joanna',            // AWS Polly voice via Twilio
+    language    : 'en-US',
+  },
+
+  // ── Twilio ───────────────────────────────────────────────────────────
   twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID,
-    authToken: process.env.TWILIO_AUTH_TOKEN,
+    accountSid : process.env.TWILIO_ACCOUNT_SID,
+    authToken  : process.env.TWILIO_AUTH_TOKEN,
     phoneNumber: process.env.TWILIO_PHONE_NUMBER,
   },
 
-  // Server Configuration
+  // ── Server ───────────────────────────────────────────────────────────
   server: {
-    port: process.env.PORT || 3000,
+    port       : process.env.PORT || 3000,
     environment: process.env.NODE_ENV || 'development',
   },
 
-  // Supabase Configuration
+  // ── Supabase ─────────────────────────────────────────────────────────
   supabase: {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_KEY,
   },
 
-  // Silence Handling - The Fix!
+  // ── Voice / Speech Timings ────────────────────────────────────────────
+  // Tuned for a ≤ 2-minute total call target.
+  // Tighter timeouts keep the call moving; escalate on repeated silence.
   silenceTimeouts: {
-    initialWelcome: parseInt(process.env.SILENCE_TIMEOUT_WELCOME) || 5000,
-    duringTroubleshooting: parseInt(process.env.SILENCE_TIMEOUT_TROUBLESHOOTING) || 10000,
-    afterQuestion: parseInt(process.env.SILENCE_TIMEOUT_QUESTION) || 8000,
-    afterError: parseInt(process.env.SILENCE_TIMEOUT_ERROR) || 6000,
+    initialGreet          : parseInt(process.env.SILENCE_TIMEOUT_WELCOME)        || 15000,
+    afterQuestion         : parseInt(process.env.SILENCE_TIMEOUT_QUESTION)       ||  8000,
+    duringTroubleshooting : parseInt(process.env.SILENCE_TIMEOUT_TROUBLESHOOTING)||  6000,
+    afterError            : parseInt(process.env.SILENCE_TIMEOUT_ERROR)          ||  5000,
+    stepVerification      : parseInt(process.env.SILENCE_TIMEOUT_STEP)           || 10000,
   },
 
-  // Escalation Settings
+  // ── Silence Escalation ───────────────────────────────────────────────
   silenceEscalation: {
-    maxSilenceRetries: parseInt(process.env.MAX_SILENCE_RETRIES) || 3,
-    escalationMessage:
-      "I'm having trouble hearing you. Let me connect you with a specialist.",
+    maxRetries        : parseInt(process.env.MAX_SILENCE_RETRIES) || 2,
+    // After maxRetries silences, offer human transfer
+    escalationMessage :
+      `I'm having trouble hearing you. Say "agent" to speak with a specialist, or try again.`,
   },
 
-  // Session Management
-  sessionContext: {
-    ttl: 3600000, // 1 hour in milliseconds
-    storeLocation: 'memory', // Use in-memory for Supabase
+  // ── Supported Issue Domains ──────────────────────────────────────────
+  // Mirrors the two primary domains in the system specification.
+  issueDomains: {
+    license_activation: {
+      label      : 'License Activation (Error 404-L)',
+      tools      : ['check_license_status', 'validate_license_key', 'activate_license'],
+      collectsKey: true,   // must collect license key before resolving
+    },
+    report_generation: {
+      label      : 'Soil Stability Report Generation',
+      tools      : ['check_report_status', 'validate_project_data', 'restart_report_engine'],
+      collectsKey: false,
+    },
+    general: {
+      label      : 'General Software Support',
+      tools      : [],
+      collectsKey: false,
+    },
   },
 
-  // Troubleshooting Flow
+  // ── Verbal Cues (used in FSM prompts) ────────────────────────────────
+  // Spec requires at least 3 per call.
+  verbalCues: {
+    acknowledge   : ['I see,', 'Got it,', 'Understood,', 'Of course,'],
+    checking      : ['Let me check that —', 'Let me pull that up —', 'One moment —'],
+    empathy       : ['I completely understand.', 'I hear you.', 'I appreciate your patience.'],
+    knowledgeGap  : `That's a great question — let me escalate that to our specialist team.`,
+    pivot         : `Got it, let me focus on that.`,
+  },
+
+  // ── Interaction Targets ───────────────────────────────────────────────
+  interaction: {
+    maxTotalSeconds   : 120,   // 2-minute target from spec
+    maxWordsPerUtterance: 30,  // hard cap per spec
+    minVerbalCuesPerCall: 3,   // spec requirement
+    greetWithinSeconds: 15,    // spec: establish context within 15 s
+  },
+
+  // ── Troubleshooting Flow ─────────────────────────────────────────────
   troubleshooting: {
-    maxDiagnosticRetries: 3,
-    enableAutoDiagnostics: true,
-    enableStepByStep: true,
+    maxDiagnosticRounds: 3,    // diagnose_1 → diagnose_2 → diagnose_3 → kb_search
+    maxStepRetries     : 1,    // retry once before escalating
   },
 
-  // Knowledge Base
+  // ── Knowledge Base ───────────────────────────────────────────────────
   knowledgeBase: {
-    enableWebScraping: process.env.ENABLE_WEB_SCRAPING === 'true',
-    enableCaching: process.env.ENABLE_CONTEXT_CACHING === 'true',
-    cacheExpiry: 86400000, // 24 hours
-    searchLimit: 5,
+    enableWebScraping: process.env.ENABLE_WEB_SCRAPING   === 'true',
+    enableCaching    : process.env.ENABLE_CONTEXT_CACHING === 'true',
+    cacheExpiry      : 86400000,  // 24 hours
+    searchLimit      : 5,
+    vectorSimilarityThreshold: 0.72,
   },
 
-  // Website Scraping
+  // ── Web Scraper Fallback ─────────────────────────────────────────────
   webscraper: {
-    baseUrl: process.env.GEOTEKNIK_WEBSITE_URL || 'https://www.geoteknikltd.com/tr/',
-    searchPaths: ['/support', '/manuals', '/faq', '/knowledge-base', '/products'],
-    timeout: parseInt(process.env.SCRAPE_TIMEOUT) || 10000,
-    retryAttempts: 2,
+    baseUrl       : process.env.GEOTEKNIK_WEBSITE_URL || 'https://www.geoteknikltd.com/tr/',
+    searchPaths   : ['/support', '/manuals', '/faq', '/knowledge-base'],
+    timeout       : parseInt(process.env.SCRAPE_TIMEOUT) || 10000,
+    retryAttempts : 2,
   },
 
-  // Analytics
-  analytics: {
-    enabled: process.env.ENABLE_ANALYTICS === 'true',
-    trackSessions: true,
-    trackResolutions: true,
+  // ── Session Management ────────────────────────────────────────────────
+  session: {
+    ttl          : 3600000,   // 1 hour in ms
+    storeLocation: 'memory',  // Map-based in-process store
   },
 
-  // Logging
+  // ── Ticket / Escalation ───────────────────────────────────────────────
+  escalation: {
+    slaHours        : 4,      // specialist contacts caller within 4 hours
+    sendSmsOnTicket : true,
+  },
+
+  // ── Logging ───────────────────────────────────────────────────────────
   logging: {
     level: process.env.LOG_LEVEL || 'info',
-    file: process.env.LOG_FILE || 'logs/agent.log',
+    file : process.env.LOG_FILE  || 'logs/agent.log',
   },
+
 };
 
 module.exports = agentConfig;
