@@ -650,25 +650,81 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── KB SEARCH for general issues ──────────────────────────────────
-    case 'kb_searching': {
-      const query  = `${s.product} ${s.symptoms.join(' ')}`;
-      const result = await searchKnowledgeBase(query);
+   case 'kb_searching': {
+  const query  = `${s.product} ${s.symptoms.join(' ')}`;
+  const result = await searchKnowledgeBase(query);
 
-      if (result.steps.length > 0) {
-        s.steps     = result.steps;
-        s.stepIndex = 0;
-        s.kbSource  = result.source;
-        s.step      = 'resolve_intro';
-        s.status    = 'resolving';
-      } else {
-        s.step   = 'no_kb_result';
-        s.status = 'escalating';
-      }
+  if (result.steps.length > 0) {
+    s.steps     = result.steps;
+    s.stepIndex = 0;
+    s.kbSource  = result.source;
+    s.step      = 'resolve_intro';
+    s.status    = 'resolving';
+    sessions.set(callSid, s);
+  } else {
+    s.step   = 'ai_fallback';
+    s.status = 'ai_generating';
+    sessions.set(callSid, s);
+  }
+  twiml.redirect('/twilio/incoming');
+  break;
+}
+// ── AI FALLBACK (when KB has no results) ─────────────────────
+case 'ai_fallback': {
+  try {
+    const problemContext = `Issue: ${s.symptoms.join('. ')}. Product: ${s.product}.`;
+    
+    const aiPrompt = `You are Geoteknik-Support, an expert technical support agent.
+Customer reports: "${problemContext}".
+Provide ONE specific troubleshooting step or question.
+STRICT RULES: Maximum 25 words, no bullet points, conversational, direct action.`;
+    
+    const aiResponse = await getAIResponse(aiPrompt);
+    
+    if (aiResponse && aiResponse.trim().length > 5) {
+      s.aiResponse = aiResponse;
+      s.step = 'ai_response_check';
+      s.history.push({ role: 'agent', text: aiResponse });
+      sessions.set(callSid, s);
+      sayAndListen(twiml, cap30(aiResponse), 20);
+    } else {
+      s.step = 'no_kb_result';
       sessions.set(callSid, s);
       twiml.redirect('/twilio/incoming');
-      break;
     }
+  } catch (err) {
+    console.error('[AI] Fallback error:', err.message);
+    s.step = 'no_kb_result';
+    sessions.set(callSid, s);
+    twiml.redirect('/twilio/incoming');
+  }
+  break;
+}
+// ── CHECK AI RESPONSE ────────────────────────────────────────
+case 'ai_response_check': {
+  s.history.push({ role: 'caller', text: speech });
 
+  if (isYes(speech)) {
+    s.step   = 'resolved';
+    s.status = 'closed';
+    sessions.set(callSid, s);
+    twiml.redirect('/twilio/incoming');
+    
+  } else if (isNo(speech)) {
+    s.step   = 'no_kb_result';
+    s.status = 'escalating';
+    sessions.set(callSid, s);
+    twiml.redirect('/twilio/incoming');
+    
+  } else {
+    sessions.set(callSid, s);
+    sayAndListen(twiml,
+      'Is that helpful, or should I connect you with a specialist?',
+      15
+    );
+  }
+  break;
+}
     // ── DIAGNOSIS ROUNDS (general issues) ────────────────────────────
     case 'diagnose_1':
     case 'diagnose_2':
