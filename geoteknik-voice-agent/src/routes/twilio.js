@@ -307,6 +307,44 @@ async function sendSMS(phoneNumber, message) {
   }
 }
 
+/**
+ * Generate contextual diagnostic question based on round
+ * Each round asks something different to build a complete picture
+ */
+async function generateDiagnosticQuestion(s, roundNumber) {
+  const baseContext = `
+    Product: ${s.product}
+    Issue: ${s.symptoms.join('. ')}
+    Round: ${roundNumber}
+  `;
+
+  // Define questions by round + product
+  const questionPrompt = `You are a technical support agent diagnosing a problem.
+  
+Context:
+${baseContext}
+
+Generate ONE diagnostic question to help identify the root cause.
+This is question #${roundNumber} of a conversation.
+Do NOT repeat questions already asked:
+${s.aiDiagnosticResponses.map((r) => `- Previously asked: ${r.question}`).join('\n')}
+
+Guidelines:
+- Ask about DIFFERENT aspects each time (timing, symptoms, attempts, environment, etc.)
+- Maximum 18 words
+- Conversational tone, not robotic
+- Focus on facts, not opinions
+- End with a question mark
+- Different question types: Round 1=What/When, Round 2=Have you tried, Round 3=Environmental`;
+
+  try {
+    const question = await getAIResponse(questionPrompt);
+    return question && question.trim().length > 5 ? question : null;
+  } catch (err) {
+    console.error('[DIAGNOSTIC] Question generation failed:', err.message);
+    return null;
+  }
+}
 async function closeSession(callSid, s, outcome) {
   try {
     await saveCallHistory({
@@ -670,33 +708,162 @@ router.post('/incoming', async (req, res) => {
   break;
 }
 // ── AI FALLBACK (when KB has no results) ─────────────────────
+// ── AI DIAGNOSTIC - Interactive multi-round questioning ─────────────
 case 'ai_fallback': {
+  // Initialize diagnostic state
+  if (!s.aiDiagnosticRound) {
+    s.aiDiagnosticRound = 1;
+    s.aiDiagnosticResponses = [];
+  }
+
+  // Generate contextual diagnostic question based on round
   try {
-    const problemContext = `Issue: ${s.symptoms.join('. ')}. Product: ${s.product}.`;
-    
-    const aiPrompt = `You are Geoteknik-Support, an expert technical support agent.
-Customer reports: "${problemContext}".
-Provide ONE specific troubleshooting step or question.
-STRICT RULES: Maximum 25 words, no bullet points, conversational, direct action.`;
-    
-    const aiResponse = await getAIResponse(aiPrompt);
-    
-    if (aiResponse && aiResponse.trim().length > 5) {
-      s.aiResponse = aiResponse;
-      s.step = 'ai_response_check';
-      s.history.push({ role: 'agent', text: aiResponse });
+    const diagnosticQuestion = await generateDiagnosticQuestion(
+      s,
+      s.aiDiagnosticRound
+    );
+
+    if (!diagnosticQuestion) {
+      // No more questions - generate solution
+      s.step = 'ai_generate_solution';
       sessions.set(callSid, s);
-      sayAndListen(twiml, cap30(aiResponse), 20);
+      twiml.redirect('/twilio/incoming');
+      break;
+    }
+
+    s.step = 'ai_awaiting_response';
+    s.pendingQuestion = diagnosticQuestion;
+    sessions.set(callSid, s);
+
+    console.log(`[AI DIAGNOSTIC] Round ${s.aiDiagnosticRound}: ${diagnosticQuestion}`);
+    sayAndListen(twiml, cap30(diagnosticQuestion), 20);
+
+  } catch (err) {
+    console.error('[AI DIAGNOSTIC] Error:', err.message);
+    // Fallback to immediate solution attempt
+    s.step = 'ai_generate_solution';
+    sessions.set(callSid, s);
+    twiml.redirect('/twilio/incoming');
+  }
+  break;
+}
+
+// ── AWAIT RESPONSE to diagnostic question ────────────────────────
+case 'ai_awaiting_response': {
+  // Store the user's response
+  s.aiDiagnosticResponses.push({
+    round: s.aiDiagnosticRound,
+    question: s.pendingQuestion,
+    answer: speech,
+    timestamp: Date.now(),
+  });
+
+  s.history.push({ role: 'caller', text: speech });
+  s.aiDiagnosticRound++;
+
+  // Check if we have enough info (3-4 questions is usually enough)
+  if (s.aiDiagnosticRound >= 4) {
+    // Enough info - generate solution
+    s.step = 'ai_generate_solution';
+    sessions.set(callSid, s);
+    console.log(`[AI DIAGNOSTIC] Collected ${s.aiDiagnosticResponses.length} responses, generating solution...`);
+    twiml.redirect('/twilio/incoming');
+  } else {
+    // Ask next question
+    s.step = 'ai_fallback';
+    sessions.set(callSid, s);
+    console.log(`[AI DIAGNOSTIC] Moving to round ${s.aiDiagnosticRound}`);
+    twiml.redirect('/twilio/incoming');
+  }
+  break;
+}
+
+// ── GENERATE AI SOLUTION from accumulated responses ───────────────
+case 'ai_generate_solution': {
+  try {
+    // Build context from all responses
+    const contextLines = s.aiDiagnosticResponses
+      .map((r) => `Q: ${r.question}\nA: ${r.answer}`)
+      .join('\n\n');
+
+    const problemSummary = `
+Product: ${s.product}
+Initial Problem: ${s.symptoms.join('. ')}
+
+User's Detailed Responses:
+${contextLines}
+`;
+
+    // Generate targeted solution
+    const solutionPrompt = `You are Geoteknik technical support. Based on the customer's detailed responses:
+
+${problemSummary}
+
+Provide ONE specific, actionable troubleshooting step or diagnostic action they should try RIGHT NOW.
+
+STRICT RULES:
+- Maximum 22 words
+- Start with an action verb (Try, Check, Verify, etc.)
+- Be specific to their exact situation
+- No generic answers
+- Direct and clear`;
+
+    console.log(`[AI DIAGNOSTIC] Generating solution with prompt...`);
+    const aiSolution = await getAIResponse(solutionPrompt);
+
+    if (aiSolution && aiSolution.trim().length > 10) {
+      // AI generated a good solution
+      s.aiSolution = aiSolution;
+      s.step = 'ai_solution_response_check';
+      s.history.push({ role: 'agent', text: aiSolution });
+      sessions.set(callSid, s);
+
+      console.log(`[AI DIAGNOSTIC] Solution generated: ${aiSolution}`);
+      sayAndListen(twiml, cap30(aiSolution), 20);
     } else {
+      // AI couldn't generate solution - escalate
+      console.log(`[AI DIAGNOSTIC] AI failed to generate solution, escalating...`);
       s.step = 'no_kb_result';
       sessions.set(callSid, s);
       twiml.redirect('/twilio/incoming');
     }
   } catch (err) {
-    console.error('[AI] Fallback error:', err.message);
+    console.error('[AI DIAGNOSTIC] Solution generation error:', err.message);
+    // On error, escalate
     s.step = 'no_kb_result';
     sessions.set(callSid, s);
     twiml.redirect('/twilio/incoming');
+  }
+  break;
+}
+
+// ── CHECK AI SOLUTION ────────────────────────────────────────────
+case 'ai_solution_response_check': {
+  s.history.push({ role: 'caller', text: speech });
+
+  if (isYes(speech)) {
+    // Solution worked!
+    console.log(`[AI DIAGNOSTIC] Solution successful`);
+    s.step = 'resolved';
+    s.status = 'closed';
+    sessions.set(callSid, s);
+    twiml.redirect('/twilio/incoming');
+
+  } else if (isNo(speech)) {
+    // Solution didn't work - escalate to human
+    console.log(`[AI DIAGNOSTIC] Solution failed, escalating to human`);
+    s.step = 'no_kb_result';
+    s.status = 'escalating';
+    sessions.set(callSid, s);
+    twiml.redirect('/twilio/incoming');
+
+  } else {
+    // Unclear - ask for clarity
+    sessions.set(callSid, s);
+    sayAndListen(twiml,
+      'Did that suggestion help resolve your issue, or does the problem continue?',
+      15
+    );
   }
   break;
 }
