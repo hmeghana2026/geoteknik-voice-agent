@@ -21,7 +21,7 @@ require('dotenv').config();
 const express   = require('express');
 const twilio    = require('twilio');
 const { searchKnowledgeBase, saveCallHistory } = require('../services/knowledgeService');
-const { getAIResponse }  = require('../services/ai');
+const { getAIResponse }  = require('../services/aiWrapper');
 
 const router        = express.Router();
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -312,37 +312,32 @@ async function sendSMS(phoneNumber, message) {
  * Each round asks something different to build a complete picture
  */
 async function generateDiagnosticQuestion(s, roundNumber) {
-  const baseContext = `
-    Product: ${s.product}
-    Issue: ${s.symptoms.join('. ')}
-    Round: ${roundNumber}
-  `;
+  const baseContext = `Product: ${s.product}. Issue: ${s.symptoms.join('. ')}. Round: ${roundNumber}`;
 
-  // Define questions by round + product
-  const questionPrompt = `You are a technical support agent diagnosing a problem.
-  
-Context:
-${baseContext}
+  const previousQuestions = s.aiDiagnosticResponses
+    .map((r) => r.question)
+    .join(' | ');
 
-Generate ONE diagnostic question to help identify the root cause.
-This is question #${roundNumber} of a conversation.
-Do NOT repeat questions already asked:
-${s.aiDiagnosticResponses.map((r) => `- Previously asked: ${r.question}`).join('\n')}
-
-Guidelines:
-- Ask about DIFFERENT aspects each time (timing, symptoms, attempts, environment, etc.)
-- Maximum 18 words
-- Conversational tone, not robotic
-- Focus on facts, not opinions
-- End with a question mark
-- Different question types: Round 1=What/When, Round 2=Have you tried, Round 3=Environmental`;
+  const questionPrompt = `Generate ONE diagnostic question to help identify the root cause.
+Round #${roundNumber}. Product: ${s.product}. Issue: ${s.symptoms[0] || 'unknown'}.
+${previousQuestions ? `Don't ask about: ${previousQuestions}` : ''}
+Ask about: timing, symptoms, environment, attempts tried, error messages.
+Maximum 18 words. Conversational tone. End with question mark.`;
 
   try {
-    const question = await getAIResponse(questionPrompt);
-    return question && question.trim().length > 5 ? question : null;
+    const question = await getAIResponse(questionPrompt, baseContext);
+    
+    if (!question || question.trim().length < 5) {
+      console.log('[DIAGNOSTIC] AI returned empty, using fallback');
+      return getShortDiagnosticQuestion(s, s.symptoms[0], roundNumber);
+    }
+    
+    console.log(`[DIAGNOSTIC] Round ${roundNumber}: ${question.slice(0, 60)}...`);
+    return question;
+    
   } catch (err) {
     console.error('[DIAGNOSTIC] Question generation failed:', err.message);
-    return null;
+    return getShortDiagnosticQuestion(s, s.symptoms[0], roundNumber);
   }
 }
 async function closeSession(callSid, s, outcome) {
@@ -474,7 +469,7 @@ router.post('/incoming', async (req, res) => {
       sessions.set(callSid, s);
       // Verbal cue 1 of 3 minimum
       sayAndListen(twiml,
-        `Hi, thanks for calling Geoteknik Support. I'm Alex. May I have your first name?`,
+        `Hi, thanks for calling Geo-tek-nik Support. I'm Alex. May I have your first name?`,
         15
       );
       break;
@@ -710,10 +705,17 @@ router.post('/incoming', async (req, res) => {
 // ── AI FALLBACK (when KB has no results) ─────────────────────
 // ── AI DIAGNOSTIC - Interactive multi-round questioning ─────────────
 case 'ai_fallback': {
-  // Initialize diagnostic state
+  // Initialize diagnostic state if not already done
   if (!s.aiDiagnosticRound) {
     s.aiDiagnosticRound = 1;
     s.aiDiagnosticResponses = [];
+    console.log(`[AI] Starting diagnostic flow for issue: ${s.symptoms.join(', ')}`);
+    
+    // Announce we're gathering more info
+    const intro = `Let me ask a few diagnostic questions to better understand the issue.`;
+    sayAndListen(twiml, intro, 8);
+    sessions.set(callSid, s);
+    break;
   }
 
   // Generate contextual diagnostic question based on round
@@ -724,7 +726,7 @@ case 'ai_fallback': {
     );
 
     if (!diagnosticQuestion) {
-      // No more questions - generate solution
+      console.log(`[AI] No more questions - proceeding to solution generation`);
       s.step = 'ai_generate_solution';
       sessions.set(callSid, s);
       twiml.redirect('/twilio/incoming');
@@ -740,14 +742,12 @@ case 'ai_fallback': {
 
   } catch (err) {
     console.error('[AI DIAGNOSTIC] Error:', err.message);
-    // Fallback to immediate solution attempt
     s.step = 'ai_generate_solution';
     sessions.set(callSid, s);
     twiml.redirect('/twilio/incoming');
   }
   break;
 }
-
 // ── AWAIT RESPONSE to diagnostic question ────────────────────────
 case 'ai_awaiting_response': {
   // Store the user's response
