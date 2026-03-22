@@ -1,8 +1,13 @@
 /**
- * src/routes/twilio.js
+ * src/routes/twilio.js - FIXED VERSION
  * ====================
  * Geoteknik Voice Support Agent — Voice-First Runtime
  *
+ * FIX APPLIED:
+ * - Added 'get_name' and 'get_issue' to silence handler exceptions
+ * - Added issueRetries counter to handle speech recognition failures gracefully
+ * - Prevents infinite loop when speech recognition fails on initial issue capture
+ * 
  * System Prompt Rules:
  *  - All responses ≤ 30 words
  *  - Verbal cues: "I see", "Got it", "Let me check that", "Understood"
@@ -55,6 +60,7 @@ const sessions = new Map();
  * @property {string}   pendingInterrupt
  * @property {boolean}  validationDone
  * @property {boolean}  readyAsked
+ * @property {number}   issueRetries     — NEW: tracks failed recognitions on issue capture
  */
 function newSession(callerPhone) {
   return {
@@ -71,6 +77,7 @@ function newSession(callerPhone) {
     steps              : [],
     stepIndex          : 0,
     silenceCount       : 0,
+    issueRetries       : 0,     // ← NEW: track failed issue recognitions
     email              : '',
     ticketId           : '',
     kbSource           : '',
@@ -78,7 +85,7 @@ function newSession(callerPhone) {
     emotionAcknowledged: false,
     pendingInterrupt   : '',
     validationDone     : false,
-    readyAsked         : false,   // ← fixed: was floating outside the function
+    readyAsked         : false,
   };
 }
 
@@ -340,6 +347,7 @@ Maximum 18 words. Conversational tone. End with question mark.`;
     return getShortDiagnosticQuestion(s, s.symptoms[0], roundNumber);
   }
 }
+
 async function closeSession(callSid, s, outcome) {
   try {
     await saveCallHistory({
@@ -438,7 +446,8 @@ router.post('/incoming', async (req, res) => {
   }
 
   // ── GLOBAL: Silence protection ────────────────────────────────────────
-  if (!speech && !['greet', 'kb_searching', 'tool_validating', 'create_ticket'].includes(s.step)) {
+  // ★ FIX: Added 'get_name' and 'get_issue' to exceptions so they handle retries internally
+  if (!speech && !['greet', 'get_name', 'get_issue', 'kb_searching', 'tool_validating', 'create_ticket'].includes(s.step)) {
     s.silenceCount = (s.silenceCount || 0) + 1;
     sessions.set(callSid, s);
 
@@ -489,10 +498,39 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── 3. GET ISSUE (classify domain) ────────────────────────────────
-    // Rule: Proactive Data Collection — route to ID/key collection immediately
+    // ★ FIX: Handle empty speech gracefully with retries, don't let global handler loop
     case 'get_issue': {
+      // If no speech captured and hasn't exceeded retries, prompt again
+      if (!speech && !s.pendingInterrupt) {
+        s.issueRetries = (s.issueRetries || 0) + 1;
+        console.log(`[${callSid}] Issue capture retry ${s.issueRetries}/3`);
+        
+        if (s.issueRetries < 3) {
+          sessions.set(callSid, s);
+          sayAndListen(twiml,
+            `I didn't quite get that. Could you describe your issue again?`,
+            20
+          );
+          return send(res, twiml);
+        } else {
+          // Max retries exceeded - escalate to human
+          console.log(`[${callSid}] Max issue capture retries exceeded, escalating`);
+          s.step = 'get_email';
+          s.status = 'escalating';
+          s.symptoms.push('Unable to capture issue via speech recognition');
+          sessions.set(callSid, s);
+          sayAndListen(twiml,
+            `I'm having trouble understanding. Let me connect you with a specialist.`,
+            15
+          );
+          return send(res, twiml);
+        }
+      }
+
+      // Speech was captured successfully - proceed with normal flow
       const effectiveSpeech = s.pendingInterrupt || speech;
       s.pendingInterrupt    = '';
+      s.issueRetries        = 0; // Reset on successful capture
 
       s.issueType = classifyIssue(effectiveSpeech);
       s.symptoms.push(effectiveSpeech);
@@ -683,110 +721,112 @@ router.post('/incoming', async (req, res) => {
     }
 
     // ── KB SEARCH for general issues ──────────────────────────────────
-   case 'kb_searching': {
-  const query  = `${s.product} ${s.symptoms.join(' ')}`;
-  const result = await searchKnowledgeBase(query);
+    case 'kb_searching': {
+      const query  = `${s.product} ${s.symptoms.join(' ')}`;
+      const result = await searchKnowledgeBase(query);
 
-  if (result.steps.length > 0) {
-    s.steps     = result.steps;
-    s.stepIndex = 0;
-    s.kbSource  = result.source;
-    s.step      = 'resolve_intro';
-    s.status    = 'resolving';
-    sessions.set(callSid, s);
-  } else {
-    s.step   = 'ai_fallback';
-    s.status = 'ai_generating';
-    sessions.set(callSid, s);
-  }
-  twiml.redirect('/twilio/incoming');
-  break;
-}
-// ── AI FALLBACK (when KB has no results) ─────────────────────
-// ── AI DIAGNOSTIC - Interactive multi-round questioning ─────────────
-case 'ai_fallback': {
-  // Initialize diagnostic state if not already done
-  if (!s.aiDiagnosticRound) {
-    s.aiDiagnosticRound = 1;
-    s.aiDiagnosticResponses = [];
-    console.log(`[AI] Starting diagnostic flow for issue: ${s.symptoms.join(', ')}`);
-    
-    // Announce we're gathering more info
-    const intro = `Let me ask a few diagnostic questions to better understand the issue.`;
-    sayAndListen(twiml, intro, 8);
-    sessions.set(callSid, s);
-    break;
-  }
-
-  // Generate contextual diagnostic question based on round
-  try {
-    const diagnosticQuestion = await generateDiagnosticQuestion(
-      s,
-      s.aiDiagnosticRound
-    );
-
-    if (!diagnosticQuestion) {
-      console.log(`[AI] No more questions - proceeding to solution generation`);
-      s.step = 'ai_generate_solution';
-      sessions.set(callSid, s);
+      if (result.steps.length > 0) {
+        s.steps     = result.steps;
+        s.stepIndex = 0;
+        s.kbSource  = result.source;
+        s.step      = 'resolve_intro';
+        s.status    = 'resolving';
+        sessions.set(callSid, s);
+      } else {
+        s.step      = 'ai_fallback';
+        s.status    = 'ai_generating';
+        sessions.set(callSid, s);
+      }
       twiml.redirect('/twilio/incoming');
       break;
     }
 
-    s.step = 'ai_awaiting_response';
-    s.pendingQuestion = diagnosticQuestion;
-    sessions.set(callSid, s);
+    // ── AI FALLBACK (when KB has no results) ─────────────────────────
+    // ── AI DIAGNOSTIC - Interactive multi-round questioning ─────────────
+    case 'ai_fallback': {
+      // Initialize diagnostic state if not already done
+      if (!s.aiDiagnosticRound) {
+        s.aiDiagnosticRound = 1;
+        s.aiDiagnosticResponses = [];
+        console.log(`[AI] Starting diagnostic flow for issue: ${s.symptoms.join(', ')}`);
+        
+        // Announce we're gathering more info
+        const intro = `Let me ask a few diagnostic questions to better understand the issue.`;
+        sayAndListen(twiml, intro, 8);
+        sessions.set(callSid, s);
+        break;
+      }
 
-    console.log(`[AI DIAGNOSTIC] Round ${s.aiDiagnosticRound}: ${diagnosticQuestion}`);
-    sayAndListen(twiml, cap30(diagnosticQuestion), 20);
+      // Generate contextual diagnostic question based on round
+      try {
+        const diagnosticQuestion = await generateDiagnosticQuestion(
+          s,
+          s.aiDiagnosticRound
+        );
 
-  } catch (err) {
-    console.error('[AI DIAGNOSTIC] Error:', err.message);
-    s.step = 'ai_generate_solution';
-    sessions.set(callSid, s);
-    twiml.redirect('/twilio/incoming');
-  }
-  break;
-}
-// ── AWAIT RESPONSE to diagnostic question ────────────────────────
-case 'ai_awaiting_response': {
-  // Store the user's response
-  s.aiDiagnosticResponses.push({
-    round: s.aiDiagnosticRound,
-    question: s.pendingQuestion,
-    answer: speech,
-    timestamp: Date.now(),
-  });
+        if (!diagnosticQuestion) {
+          console.log(`[AI] No more questions - proceeding to solution generation`);
+          s.step = 'ai_generate_solution';
+          sessions.set(callSid, s);
+          twiml.redirect('/twilio/incoming');
+          break;
+        }
 
-  s.history.push({ role: 'caller', text: speech });
-  s.aiDiagnosticRound++;
+        s.step = 'ai_awaiting_response';
+        s.pendingQuestion = diagnosticQuestion;
+        sessions.set(callSid, s);
 
-  // Check if we have enough info (3-4 questions is usually enough)
-  if (s.aiDiagnosticRound >= 4) {
-    // Enough info - generate solution
-    s.step = 'ai_generate_solution';
-    sessions.set(callSid, s);
-    console.log(`[AI DIAGNOSTIC] Collected ${s.aiDiagnosticResponses.length} responses, generating solution...`);
-    twiml.redirect('/twilio/incoming');
-  } else {
-    // Ask next question
-    s.step = 'ai_fallback';
-    sessions.set(callSid, s);
-    console.log(`[AI DIAGNOSTIC] Moving to round ${s.aiDiagnosticRound}`);
-    twiml.redirect('/twilio/incoming');
-  }
-  break;
-}
+        console.log(`[AI DIAGNOSTIC] Round ${s.aiDiagnosticRound}: ${diagnosticQuestion}`);
+        sayAndListen(twiml, cap30(diagnosticQuestion), 20);
 
-// ── GENERATE AI SOLUTION from accumulated responses ───────────────
-case 'ai_generate_solution': {
-  try {
-    // Build context from all responses
-    const contextLines = s.aiDiagnosticResponses
-      .map((r) => `Q: ${r.question}\nA: ${r.answer}`)
-      .join('\n\n');
+      } catch (err) {
+        console.error('[AI DIAGNOSTIC] Error:', err.message);
+        s.step = 'ai_generate_solution';
+        sessions.set(callSid, s);
+        twiml.redirect('/twilio/incoming');
+      }
+      break;
+    }
 
-    const problemSummary = `
+    // ── AWAIT RESPONSE to diagnostic question ────────────────────────
+    case 'ai_awaiting_response': {
+      // Store the user's response
+      s.aiDiagnosticResponses.push({
+        round: s.aiDiagnosticRound,
+        question: s.pendingQuestion,
+        answer: speech,
+        timestamp: Date.now(),
+      });
+
+      s.history.push({ role: 'caller', text: speech });
+      s.aiDiagnosticRound++;
+
+      // Check if we have enough info (3-4 questions is usually enough)
+      if (s.aiDiagnosticRound >= 4) {
+        // Enough info - generate solution
+        s.step = 'ai_generate_solution';
+        sessions.set(callSid, s);
+        console.log(`[AI DIAGNOSTIC] Collected ${s.aiDiagnosticResponses.length} responses, generating solution...`);
+        twiml.redirect('/twilio/incoming');
+      } else {
+        // Ask next question
+        s.step = 'ai_fallback';
+        sessions.set(callSid, s);
+        console.log(`[AI DIAGNOSTIC] Moving to round ${s.aiDiagnosticRound}`);
+        twiml.redirect('/twilio/incoming');
+      }
+      break;
+    }
+
+    // ── GENERATE AI SOLUTION from accumulated responses ───────────────
+    case 'ai_generate_solution': {
+      try {
+        // Build context from all responses
+        const contextLines = s.aiDiagnosticResponses
+          .map((r) => `Q: ${r.question}\nA: ${r.answer}`)
+          .join('\n\n');
+
+        const problemSummary = `
 Product: ${s.product}
 Initial Problem: ${s.symptoms.join('. ')}
 
@@ -794,8 +834,8 @@ User's Detailed Responses:
 ${contextLines}
 `;
 
-    // Generate targeted solution
-    const solutionPrompt = `You are Geoteknik technical support. Based on the customer's detailed responses:
+        // Generate targeted solution
+        const solutionPrompt = `You are Geoteknik technical support. Based on the customer's detailed responses:
 
 ${problemSummary}
 
@@ -808,90 +848,92 @@ STRICT RULES:
 - No generic answers
 - Direct and clear`;
 
-    console.log(`[AI DIAGNOSTIC] Generating solution with prompt...`);
-    const aiSolution = await getAIResponse(solutionPrompt);
+        console.log(`[AI DIAGNOSTIC] Generating solution with prompt...`);
+        const aiSolution = await getAIResponse(solutionPrompt);
 
-    if (aiSolution && aiSolution.trim().length > 10) {
-      // AI generated a good solution
-      s.aiSolution = aiSolution;
-      s.step = 'ai_solution_response_check';
-      s.history.push({ role: 'agent', text: aiSolution });
-      sessions.set(callSid, s);
+        if (aiSolution && aiSolution.trim().length > 10) {
+          // AI generated a good solution
+          s.aiSolution = aiSolution;
+          s.step = 'ai_solution_response_check';
+          s.history.push({ role: 'agent', text: aiSolution });
+          sessions.set(callSid, s);
 
-      console.log(`[AI DIAGNOSTIC] Solution generated: ${aiSolution}`);
-      sayAndListen(twiml, cap30(aiSolution), 20);
-    } else {
-      // AI couldn't generate solution - escalate
-      console.log(`[AI DIAGNOSTIC] AI failed to generate solution, escalating...`);
-      s.step = 'no_kb_result';
-      sessions.set(callSid, s);
-      twiml.redirect('/twilio/incoming');
+          console.log(`[AI DIAGNOSTIC] Solution generated: ${aiSolution}`);
+          sayAndListen(twiml, cap30(aiSolution), 20);
+        } else {
+          // AI couldn't generate solution - escalate
+          console.log(`[AI DIAGNOSTIC] AI failed to generate solution, escalating...`);
+          s.step = 'no_kb_result';
+          sessions.set(callSid, s);
+          twiml.redirect('/twilio/incoming');
+        }
+      } catch (err) {
+        console.error('[AI DIAGNOSTIC] Solution generation error:', err.message);
+        // On error, escalate
+        s.step = 'no_kb_result';
+        sessions.set(callSid, s);
+        twiml.redirect('/twilio/incoming');
+      }
+      break;
     }
-  } catch (err) {
-    console.error('[AI DIAGNOSTIC] Solution generation error:', err.message);
-    // On error, escalate
-    s.step = 'no_kb_result';
-    sessions.set(callSid, s);
-    twiml.redirect('/twilio/incoming');
-  }
-  break;
-}
 
-// ── CHECK AI SOLUTION ────────────────────────────────────────────
-case 'ai_solution_response_check': {
-  s.history.push({ role: 'caller', text: speech });
+    // ── CHECK AI SOLUTION ────────────────────────────────────────────
+    case 'ai_solution_response_check': {
+      s.history.push({ role: 'caller', text: speech });
 
-  if (isYes(speech)) {
-    // Solution worked!
-    console.log(`[AI DIAGNOSTIC] Solution successful`);
-    s.step = 'resolved';
-    s.status = 'closed';
-    sessions.set(callSid, s);
-    twiml.redirect('/twilio/incoming');
+      if (isYes(speech)) {
+        // Solution worked!
+        console.log(`[AI DIAGNOSTIC] Solution successful`);
+        s.step = 'resolved';
+        s.status = 'closed';
+        sessions.set(callSid, s);
+        twiml.redirect('/twilio/incoming');
 
-  } else if (isNo(speech)) {
-    // Solution didn't work - escalate to human
-    console.log(`[AI DIAGNOSTIC] Solution failed, escalating to human`);
-    s.step = 'no_kb_result';
-    s.status = 'escalating';
-    sessions.set(callSid, s);
-    twiml.redirect('/twilio/incoming');
+      } else if (isNo(speech)) {
+        // Solution didn't work - escalate to human
+        console.log(`[AI DIAGNOSTIC] Solution failed, escalating to human`);
+        s.step = 'no_kb_result';
+        s.status = 'escalating';
+        sessions.set(callSid, s);
+        twiml.redirect('/twilio/incoming');
 
-  } else {
-    // Unclear - ask for clarity
-    sessions.set(callSid, s);
-    sayAndListen(twiml,
-      'Did that suggestion help resolve your issue, or does the problem continue?',
-      15
-    );
-  }
-  break;
-}
-// ── CHECK AI RESPONSE ────────────────────────────────────────
-case 'ai_response_check': {
-  s.history.push({ role: 'caller', text: speech });
+      } else {
+        // Unclear - ask for clarity
+        sessions.set(callSid, s);
+        sayAndListen(twiml,
+          'Did that suggestion help resolve your issue, or does the problem continue?',
+          15
+        );
+      }
+      break;
+    }
 
-  if (isYes(speech)) {
-    s.step   = 'resolved';
-    s.status = 'closed';
-    sessions.set(callSid, s);
-    twiml.redirect('/twilio/incoming');
-    
-  } else if (isNo(speech)) {
-    s.step   = 'no_kb_result';
-    s.status = 'escalating';
-    sessions.set(callSid, s);
-    twiml.redirect('/twilio/incoming');
-    
-  } else {
-    sessions.set(callSid, s);
-    sayAndListen(twiml,
-      'Is that helpful, or should I connect you with a specialist?',
-      15
-    );
-  }
-  break;
-}
+    // ── CHECK AI RESPONSE ────────────────────────────────────────────
+    case 'ai_response_check': {
+      s.history.push({ role: 'caller', text: speech });
+
+      if (isYes(speech)) {
+        s.step   = 'resolved';
+        s.status = 'closed';
+        sessions.set(callSid, s);
+        twiml.redirect('/twilio/incoming');
+        
+      } else if (isNo(speech)) {
+        s.step   = 'no_kb_result';
+        s.status = 'escalating';
+        sessions.set(callSid, s);
+        twiml.redirect('/twilio/incoming');
+        
+      } else {
+        sessions.set(callSid, s);
+        sayAndListen(twiml,
+          'Is that helpful, or should I connect you with a specialist?',
+          15
+        );
+      }
+      break;
+    }
+
     // ── DIAGNOSIS ROUNDS (general issues) ────────────────────────────
     case 'diagnose_1':
     case 'diagnose_2':
@@ -1059,6 +1101,7 @@ case 'ai_response_check': {
           licenseKey: '',
           validationDone: false,
           readyAsked: false,
+          issueRetries: 0,
         });
         sessions.set(callSid, s);
         sayAndListen(twiml, `Of course — what else can I help you with?`);
@@ -1142,6 +1185,7 @@ case 'ai_response_check': {
           steps    : [],
           stepIndex: 0,
           readyAsked: false,
+          issueRetries: 0,
         });
         sessions.set(callSid, s);
         sayAndListen(twiml, `Of course — what else can I help you with?`);
