@@ -154,7 +154,7 @@ function isNo(t = '') {
   return /\b(no|nope|still|same issue|not working|didn't work|didn't help|nothing|failed|negative|doesn't)\b/i.test(t);
 }
 
-const VOICE = { voice: 'Polly.Salli' };
+const VOICE = { voice: 'man' };
 const LANG  = 'en-US';
 
 function cap30(text = '') {
