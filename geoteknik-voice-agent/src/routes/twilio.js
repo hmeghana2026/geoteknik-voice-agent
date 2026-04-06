@@ -22,28 +22,32 @@ const sessions = new Map();
 
 function newSession(callerPhone) {
   return {
-    step               : 'greet',
-    status             : 'greeting',
+    step                  : 'greet',
+    status                : 'greeting',
     callerPhone,
-    callerName         : '',
-    product            : '',
-    issueType          : '',
-    projectId          : '',
-    licenseKey         : '',
-    symptoms           : [],
-    diagRound          : 0,
-    steps              : [],
-    stepIndex          : 0,
-    silenceCount       : 0,
-    issueRetries       : 0,
-    email              : '',
-    ticketId           : '',
-    kbSource           : '',
-    history            : [],
-    emotionAcknowledged: false,
-    pendingInterrupt   : '',
-    validationDone     : false,
-    readyAsked         : false,
+    callerName            : '',
+    product               : '',
+    issueType             : '',
+    projectId             : '',
+    licenseKey            : '',
+    symptoms              : [],
+    diagRound             : 0,
+    steps                 : [],
+    stepIndex             : 0,
+    silenceCount          : 0,
+    issueRetries          : 0,
+    email                 : '',
+    ticketId              : '',
+    kbSource              : '',
+    history               : [],
+    emotionAcknowledged   : false,
+    pendingInterrupt      : '',
+    validationDone        : false,
+    readyAsked            : false,
+    aiDiagnosticRound     : 0,
+    aiDiagnosticResponses : [],
+    pendingQuestion       : '',
+    aiSolution            : '',
   };
 }
 
@@ -154,7 +158,7 @@ function isNo(t = '') {
   return /\b(no|nope|still|same issue|not working|didn't work|didn't help|nothing|failed|negative|doesn't)\b/i.test(t);
 }
 
-const VOICE = { voice: 'man' };
+const VOICE = { voice: 'Polly.Salli' };
 const LANG  = 'en-US';
 
 function cap30(text = '') {

@@ -1,113 +1,137 @@
 /**
- * Speech Service
- * Handles speech-to-text and text-to-speech via Twilio
+ * speechService.js
+ * ================
+ * TwiML builder helpers shared across the app.
+ *
+ * NOTE: The main voice loop lives in src/routes/twilio.js and builds TwiML
+ * inline.  This module provides the same helpers in a reusable class so that
+ * server.js / voiceAgent.js can use them without duplicating logic.
+ *
+ * Voice: Polly.Salli (Amazon Polly — natural, friendly female)
  */
 
+'use strict';
+
 const twilio = require('twilio');
-const logger = require('../utils/logger');
+
+const VoiceResponse = twilio.twiml.VoiceResponse;
+
+const VOICE    = { voice: 'Polly.Salli' };
+const LANGUAGE = 'en-US';
+
+/** Hard-limit to 30 words so TTS stays conversational. */
+function cap30(text = '') {
+  const words = text.trim().split(/\s+/);
+  if (words.length <= 30) return text.trim();
+  const truncated   = words.slice(0, 30).join(' ');
+  const lastPeriod  = truncated.lastIndexOf('.');
+  const lastComma   = truncated.lastIndexOf(',');
+  const cut = lastPeriod > 15 ? lastPeriod + 1
+            : lastComma  > 15 ? lastComma  + 1
+            : truncated.length;
+  return truncated.slice(0, cut).trim();
+}
 
 class SpeechService {
+  /**
+   * @param {string} accountSid   - Twilio Account SID (kept for SMS / REST calls)
+   * @param {string} authToken    - Twilio Auth Token
+   * @param {string} phoneNumber  - Twilio phone number for outbound SMS
+   */
   constructor(accountSid, authToken, phoneNumber) {
-    this.client = twilio(accountSid, authToken);
-    this.phoneNumber = phoneNumber;
-    this.currentCall = null;
+    this.twilioClient = accountSid && authToken
+      ? twilio(accountSid, authToken)
+      : null;
+    this.phoneNumber = phoneNumber || process.env.TWILIO_PHONE_NUMBER;
   }
 
-  /**
-   * Speak text to user
-   */
-  async speak(text) {
-    try {
-      if (!this.currentCall) {
-        logger.warn('No active call to speak to');
-        return;
-      }
-
-      // Use Twilio's say/play verbs through TwiML
-      logger.debug(`Speaking: ${text.substring(0, 50)}...`);
-
-      // In a real implementation, this would use Twilio's gather/say
-      // For now, we'll implement a basic version
-      await this.playMessage(text);
-    } catch (error) {
-      logger.error('Speech failed:', error);
-      throw error;
-    }
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // TwiML builders
+  // ─────────────────────────────────────────────────────────────────────────
 
   /**
-   * Listen for user speech with timeout
+   * Build TwiML that speaks `text` and then listens for a speech response.
+   *
+   * @param {string} text          - What the agent says
+   * @param {string} actionUrl     - Twilio webhook to POST the SpeechResult to
+   * @param {number} [timeout=12]  - Silence timeout in seconds
+   * @returns {string}             - TwiML XML string
    */
-  async listen(question, timeout = 8000) {
-    return new Promise((resolve, reject) => {
-      try {
-        logger.debug(`Listening for response (timeout: ${timeout}ms)`);
-
-        // Simulate listening with timeout
-        const timeoutHandle = setTimeout(() => {
-          logger.debug('Listen timeout - no response');
-          resolve({ text: '', confidence: 0 });
-        }, timeout);
-
-        // In a real Twilio implementation, you would use:
-        // - Gather to collect DTMF or voice input
-        // - Speech recognition for voice
-        // For POC, we'll simulate with a mock response
-
-        clearTimeout(timeoutHandle);
-        resolve({
-          text: this.getMockResponse(question),
-          confidence: 0.95,
-        });
-      } catch (error) {
-        logger.error('Listen failed:', error);
-        reject(error);
-      }
+  buildSayAndListen(text, actionUrl = '/twilio/incoming', timeout = 12) {
+    const twiml  = new VoiceResponse();
+    const gather = twiml.gather({
+      input        : 'speech',
+      action       : actionUrl,
+      method       : 'POST',
+      speechTimeout: 'auto',
+      language     : LANGUAGE,
+      timeout,
     });
+    gather.say(VOICE, cap30(text));
+    twiml.redirect({ method: 'POST' }, actionUrl);  // fallback if gather times out
+    return twiml.toString();
   }
 
   /**
-   * Play message to call
+   * Build TwiML that speaks `text` and hangs up.
+   *
+   * @param {string} text
+   * @returns {string} TwiML XML string
    */
-  async playMessage(message) {
+  buildSayAndHang(text) {
+    const twiml = new VoiceResponse();
+    twiml.say(VOICE, cap30(text));
+    twiml.hangup();
+    return twiml.toString();
+  }
+
+  /**
+   * Build TwiML that says `text` with no gather (pure announcement).
+   *
+   * @param {string} text
+   * @returns {string} TwiML XML string
+   */
+  buildAnnounce(text) {
+    const twiml = new VoiceResponse();
+    twiml.say(VOICE, cap30(text));
+    return twiml.toString();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // REST helpers (require Twilio credentials)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Send an SMS via Twilio REST API.
+   * Non-throwing — failures are logged only.
+   *
+   * @param {string} toNumber   - Recipient E.164 phone number
+   * @param {string} message    - SMS body text
+   */
+  async sendSMS(toNumber, message) {
+    if (!this.twilioClient) {
+      console.warn('[SpeechService] Twilio client not initialised — SMS skipped');
+      return;
+    }
     try {
-      // In production, integrate with Twilio's TwiML
-      logger.debug(`Playing message: ${message}`);
-    } catch (error) {
-      logger.error('Play message failed:', error);
-      throw error;
+      await this.twilioClient.messages.create({
+        body: message,
+        from: this.phoneNumber,
+        to  : toNumber,
+      });
+      console.log(`[SpeechService] SMS sent to ${toNumber}`);
+    } catch (err) {
+      console.warn(`[SpeechService] SMS failed (non-fatal): ${err.message}`);
     }
   }
 
-  /**
-   * Set current call context
-   */
-  setCurrentCall(callSid) {
-    this.currentCall = callSid;
-    logger.debug(`Current call set to: ${callSid}`);
-  }
+  // ─────────────────────────────────────────────────────────────────────────
+  // Utility
+  // ─────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Mock response for testing/POC
-   */
-  getMockResponse(question) {
-    const responses = {
-      device: 'It\'s a geoteknik drilling machine',
-      'when did': 'It started happening this morning',
-      'what were': 'I was trying to calibrate the settings',
-      'have you tried': 'I restarted it but it didn\'t help',
-      'resolved': 'Yes it\'s working now',
-      'works': 'Yes it works',
-      'repeat': 'The device is not responding',
-    };
-
-    for (const [key, value] of Object.entries(responses)) {
-      if (question.toLowerCase().includes(key)) {
-        return value;
-      }
-    }
-
-    return 'I\'m having an issue with my equipment';
+  /** Expose the 30-word cap helper for use by callers. */
+  static cap30(text) {
+    return cap30(text);
   }
 }
 

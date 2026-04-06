@@ -197,6 +197,129 @@ const DEMO_KB = [
       'For registration errors, ensure your scan targets were placed within the overlap area.',
     ],
   },
+
+  // ── Geoteknik Software — License & Activation ──────────────────────────
+  {
+    product: 'Geoteknik Software',
+    keywords: ['license', 'licence', 'activation', 'activate', '404-l', '404l', 'error', 'key', 'unlock', 'software', 'geoteknik', 'invalid', 'expired', 'not working'],
+    issue_title: 'Geoteknik Software license activation error (404-L)',
+    steps: [
+      'Open Geoteknik Software and navigate to Help, then License Manager from the top menu.',
+      'Click "Deactivate" to reset any stale activation on this machine, then click "Activate."',
+      'Enter your license key exactly as provided in your purchase email — use copy and paste to avoid typos.',
+      'Ensure your machine is connected to the internet during activation so the license server can verify your key.',
+      'Restart the software after activation. Your license status should now show as Active.',
+    ],
+  },
+
+  {
+    product: 'Geoteknik Software',
+    keywords: ['license', 'licence', 'transfer', 'move', 'new computer', 'new machine', 'another pc', 'deactivate', 'migrate', 'reinstall'],
+    issue_title: 'Moving Geoteknik Software license to a new computer',
+    steps: [
+      'On your old computer, open Geoteknik Software and go to Help, then License Manager.',
+      'Click "Deactivate" to release the license — this frees it for use on another machine.',
+      'Install Geoteknik Software on the new computer using the installer from your purchase email.',
+      'Open the software on the new machine and enter your license key in Help, then License Manager.',
+      'Click Activate — the license will bind to the new computer immediately.',
+    ],
+  },
+
+  // ── Geoteknik Software — Report Generation ─────────────────────────────
+  {
+    product: 'Report Engine',
+    keywords: ['report', 'generate', 'generation', 'failed', 'error', 'soil', 'stability', 'won\'t generate', 'cannot create', 'report engine', 'stuck', 'stalled', 'not working'],
+    issue_title: 'Geoteknik Software report generation failing or stalled',
+    steps: [
+      'Go to Tools in the menu bar, then Report Engine, then click Restart Engine.',
+      'Wait 30 seconds for the engine to reinitialise — watch for the green status indicator in the bottom toolbar.',
+      'Open your project and click Generate Report again from the Reports menu.',
+      'If the same error appears, clear the application cache under Tools, then Options, then Clear Cache, and try again.',
+      'Verify your project data is complete and all required input fields are filled in before generating.',
+    ],
+  },
+
+  {
+    product: 'Report Engine',
+    keywords: ['report', 'pdf', 'export', 'blank', 'empty', 'missing data', 'corrupt', 'incomplete', 'pages missing', 'graph', 'chart'],
+    issue_title: 'Generated report is blank or missing data sections',
+    steps: [
+      'Verify that all test layers and borehole data are marked as complete in the Project Navigator panel.',
+      'Check the report template under Reports, then Template Settings — ensure all sections are enabled.',
+      'Regenerate the report with a lower DPI setting first: go to Reports, then Page Setup, set to 150 DPI.',
+      'If graphs are missing, right-click each chart in the project and choose Refresh Chart Data.',
+      'Try exporting as a Word document instead of PDF to rule out a PDF renderer issue.',
+    ],
+  },
+
+  // ── Geoteknik Software — Installation & Updates ────────────────────────
+  {
+    product: 'Geoteknik Software',
+    keywords: ['install', 'installation', 'setup', 'cannot install', 'error installing', 'failed to install', 'admin', 'permissions', 'windows', 'blocked'],
+    issue_title: 'Geoteknik Software installation failing on Windows',
+    steps: [
+      'Right-click the installer file and choose "Run as administrator" — this is required for all Geoteknik installations.',
+      'Temporarily disable your antivirus software during installation, as it may block the license component.',
+      'If you see a "Windows protected your PC" popup, click "More info" then "Run anyway" to proceed.',
+      'Ensure you have at least 4 GB of free disk space on the installation drive.',
+      'After installation completes, re-enable your antivirus and run Windows Update to ensure all dependencies are current.',
+    ],
+  },
+
+  {
+    product: 'Geoteknik Software',
+    keywords: ['update', 'upgrade', 'version', 'new version', 'latest', 'check for updates', 'patch', 'outdated'],
+    issue_title: 'How to update Geoteknik Software to the latest version',
+    steps: [
+      'Open Geoteknik Software and go to Help, then Check for Updates.',
+      'If an update is available, click Download and Install — the installer will close and restart the application.',
+      'If the update check fails, visit the Geoteknik customer portal at your registered email for direct download links.',
+      'After updating, re-enter your license key if prompted — this is normal after major version upgrades.',
+      'Check Help, then About to confirm the new version number matches the release notes.',
+    ],
+  },
+
+  // ── Geoteknik Software — Project & Data Issues ─────────────────────────
+  {
+    product: 'Geoteknik Software',
+    keywords: ['project', 'open', 'cannot open', 'file', 'corrupt', 'damaged', 'lost data', 'backup', 'recover', 'crash on open'],
+    issue_title: 'Cannot open Geoteknik project file or project appears corrupt',
+    steps: [
+      'Try opening the file by going to File, then Open Recent — sometimes the direct file path becomes invalid.',
+      'Check the auto-backup folder at C:\\Users\\YourName\\AppData\\Roaming\\Geoteknik\\Backups for a recent copy.',
+      'If the project crashes on open, hold Shift while opening the file to load it in Safe Mode without plugins.',
+      'Right-click the project file in Windows Explorer and check the file size — a file under 5 KB is likely empty or corrupt.',
+      'If you have a backup, copy it to the project folder and rename it to the original filename.',
+    ],
+  },
+
+  // ── Total Station — additional scenario ────────────────────────────────
+  {
+    product: 'total station',
+    keywords: ['total station', 'battery', 'power', 'charge', 'charging', 'not turning on', 'dead', 'wont start', 'no power'],
+    issue_title: 'Total station not powering on or battery not charging',
+    steps: [
+      'Remove the battery and inspect the contacts for corrosion or dirt — clean with a dry cloth.',
+      'Insert the battery into the charger and check for the charging LED indicator.',
+      'Allow at least 2 hours of charge before attempting to power on the instrument.',
+      'If the instrument powers on only when connected to the charger, the battery needs replacement.',
+      'Note the battery model number printed on the battery label for ordering a replacement.',
+    ],
+  },
+
+  // ── GNSS — additional scenario ─────────────────────────────────────────
+  {
+    product: 'gps',
+    keywords: ['gps', 'gnss', 'ntrip', 'correction', 'internet', 'data', 'mobile', 'sim', 'network', 'rtk corrections', 'caster'],
+    issue_title: 'GNSS receiver not receiving NTRIP RTK corrections',
+    steps: [
+      'Verify mobile data is active on the SIM card inserted in the receiver.',
+      'Check your NTRIP credentials in your survey software under Connection Settings.',
+      'Confirm the NTRIP caster address and port number are correct — contact your corrections provider if unsure.',
+      'Test internet connectivity by opening the web browser on your data collector and loading any webpage.',
+      'Try a different NTRIP mount point — your provider may have multiple reference stations available.',
+    ],
+  },
 ];
 
 async function seedDatabase() {
@@ -286,12 +409,18 @@ async function seedDatabase() {
     if (failed === 0) {
       console.log('✨ All entries seeded successfully!\n');
       console.log('🎯 Test it out:\n');
+      console.log('   Hardware:');
       console.log('   • "My drone won\'t start"');
       console.log('   • "Compass calibration error"');
       console.log('   • "GPS can\'t find satellites"');
       console.log('   • "RTK not getting a fixed solution"');
       console.log('   • "Total station can\'t measure distance"');
-      console.log('   • "Data collector keeps freezing"\n');
+      console.log('   • "Data collector keeps freezing"');
+      console.log('   Software:');
+      console.log('   • "I\'m getting a 404-L license error"');
+      console.log('   • "Software won\'t activate"');
+      console.log('   • "Report generation is failing"');
+      console.log('   • "Can\'t open my project file"\n');
       process.exit(0);
     } else {
       console.log(`⚠️  ${failed} entries failed to seed\n`);

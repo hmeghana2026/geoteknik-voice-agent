@@ -83,6 +83,11 @@ async function saveCallHistory(record) {
 // PRIVATE: VECTOR SEARCH (real manuals)
 // ─────────────────────────────────────────────────────────────────────────────
 async function vectorSearch(query) {
+  // Guard: skip silently if OpenAI key is not configured
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY not set — skipping vector search');
+  }
+
   // Step 1: Embed the query
   const embedding = await getEmbedding(query);
 
