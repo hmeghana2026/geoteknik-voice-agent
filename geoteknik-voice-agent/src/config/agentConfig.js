@@ -21,11 +21,25 @@ const agentConfig = {
     language    : 'en-US',
   },
 
-  // ── Twilio ───────────────────────────────────────────────────────────
+  // ── Twilio (telephony layer — phone number & SMS) ─────────────────────
   twilio: {
     accountSid : process.env.TWILIO_ACCOUNT_SID,
     authToken  : process.env.TWILIO_AUTH_TOKEN,
     phoneNumber: process.env.TWILIO_PHONE_NUMBER,
+  },
+
+  // ── Vapi AI (conversation layer — STT, LLM, TTS, turn-taking) ────────
+  // Vapi replaces TwiML gather/say. Twilio number is imported into Vapi
+  // so inbound calls are handled end-to-end by Vapi, while function calls
+  // (tool execution, KB search, ticketing) are dispatched back here.
+  vapi: {
+    apiKey      : process.env.VAPI_API_KEY,
+    serverUrl   : process.env.VAPI_SERVER_URL,       // public URL of this server + /vapi/webhook
+    serverSecret: process.env.VAPI_SERVER_SECRET,    // optional shared secret for webhook auth
+    model       : process.env.VAPI_MODEL       || 'gpt-4o-mini',
+    voiceProvider: process.env.VAPI_VOICE_PROVIDER || '11labs',
+    voiceId     : process.env.VAPI_VOICE_ID    || 'sarah',
+    maxDuration : parseInt(process.env.VAPI_MAX_DURATION) || 300,
   },
 
   // ── Server ───────────────────────────────────────────────────────────
