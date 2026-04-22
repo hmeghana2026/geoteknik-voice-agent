@@ -190,18 +190,33 @@ async function init() {
   }
 }
 
-function buildAssistantOverrides() {
-  // Override the assistant's transcriber + greeting based on the chosen UI language.
-  if (lang === 'tr') {
-    return {
-      firstMessage: t('firstMessage'),
-      transcriber: { provider: 'deepgram', model: 'nova-2', language: 'tr' },
+async function buildAssistantOverrides() {
+  // Pull the up-to-date system prompt + first message for the chosen UI language.
+  let promptData;
+  try {
+    const r = await fetch(`/api/agent-prompt?lang=${encodeURIComponent(lang)}`);
+    promptData = await r.json();
+  } catch (e) {
+    console.warn('Could not load agent prompt, falling back to defaults', e);
+    promptData = { systemPrompt: '', firstMessage: t('firstMessage') };
+  }
+
+  const overrides = {
+    firstMessage: promptData.firstMessage || t('firstMessage'),
+    transcriber: {
+      provider: 'deepgram',
+      model: 'nova-2',
+      language: lang === 'tr' ? 'tr' : 'en',
+    },
+  };
+
+  if (promptData.systemPrompt) {
+    overrides.model = {
+      messages: [{ role: 'system', content: promptData.systemPrompt }],
     };
   }
-  return {
-    firstMessage: t('firstMessage'),
-    transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
-  };
+
+  return overrides;
 }
 
 async function startCall() {
@@ -214,7 +229,8 @@ async function startCall() {
     await ensureMicAccess();
     setStatus(t('statusConnecting'));
     clearTranscript();
-    await vapi.start(assistantId, buildAssistantOverrides());
+    const overrides = await buildAssistantOverrides();
+    await vapi.start(assistantId, overrides);
   } catch (err) {
     console.error('start failed', err);
     const msg = (err && (err.message || err.errorMsg)) || String(err);

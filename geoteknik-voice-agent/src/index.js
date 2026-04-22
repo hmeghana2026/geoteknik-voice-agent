@@ -4,6 +4,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const twilioRoutes = require('./routes/twilio');
 const vapiRoutes   = require('./routes/vapi');
+const { buildSystemPrompt, getFirstMessage } = require('./agentPrompt');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +24,17 @@ app.get('/api/config', (req, res) => {
   res.json({
     publicKey:   process.env.VAPI_PUBLIC_KEY   || '',
     assistantId: process.env.VAPI_ASSISTANT_ID || '',
+  });
+});
+
+// Returns the system prompt + first message for a given UI language.
+// The browser passes these to Vapi as assistantOverrides on call start.
+app.get('/api/agent-prompt', (req, res) => {
+  const lang = (req.query.lang === 'tr') ? 'tr' : 'en';
+  res.json({
+    lang,
+    systemPrompt: buildSystemPrompt(lang),
+    firstMessage: getFirstMessage(lang),
   });
 });
 
