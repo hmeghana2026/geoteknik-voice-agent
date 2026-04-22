@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const bodyParser = require('body-parser');
 const twilioRoutes = require('./routes/twilio');
@@ -17,10 +18,17 @@ app.use('/twilio', twilioRoutes);
 // Set VAPI_SERVER_URL=https://your-domain.com/vapi in .env
 app.use('/vapi', vapiRoutes);
 
-app.get('/', (req, res) => {
-  res.send('Geoteknik Voice Agent is running.');
+// Public config for the in-browser voice demo (only the PUBLIC key is exposed).
+app.get('/api/config', (req, res) => {
+  res.json({
+    publicKey:   process.env.VAPI_PUBLIC_KEY   || '',
+    assistantId: process.env.VAPI_ASSISTANT_ID || '',
+  });
 });
 
-app.listen(PORT, () => {
+// Serve the demo website (homepage + static assets).
+app.use(express.static(path.join(__dirname, '..', 'public')));
+
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });

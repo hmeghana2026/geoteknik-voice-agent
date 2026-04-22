@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Geoteknik Voice Support — Talk to our AI engineer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="nav">
+    <div class="brand">
+      <div class="brand-mark">G</div>
+      <div>
+        <div class="brand-name">Geoteknik</div>
+        <div class="brand-sub">Voice Support Demo</div>
+      </div>
+    </div>
+    <nav>
+      <a href="#capabilities">Capabilities</a>
+      <a href="#how">How it works</a>
+      <a href="#faq">FAQ</a>
+      <a href="#call" class="nav-cta">Talk to the agent</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="badge">Live AI Voice Agent</span>
+        <h1>Resolve geotechnical software issues in <span class="accent">under a minute</span>.</h1>
+        <p class="lede">
+          Skip the ticket queue. Click the call button and speak directly with our AI support engineer trained on Geoteknik products. It listens, troubleshoots, and walks you through the fix in real time.
+        </p>
+        <div class="hero-cta">
+          <button id="hero-call" class="btn btn-primary">
+            <span class="dot"></span> Start a voice call
+          </button>
+          <a href="#capabilities" class="btn btn-ghost">See what it can do</a>
+        </div>
+        <div class="trust">
+          <div><strong>&lt;800ms</strong><span>average response</span></div>
+          <div><strong>24/7</strong><span>always available</span></div>
+          <div><strong>Multi-lingual</strong><span>EN · TR</span></div>
+        </div>
+      </div>
+
+      <aside id="call" class="call-card">
+        <div class="call-card-head">
+          <div>
+            <div class="call-title">Geoteknik-Support</div>
+            <div id="call-status" class="call-status">Idle — ready when you are</div>
+          </div>
+          <div id="orb" class="orb"></div>
+        </div>
+
+        <div id="transcript" class="transcript" aria-live="polite">
+          <div class="placeholder">Your conversation will appear here. Tap “Start call”, allow microphone access, and just talk — like you would to a colleague.</div>
+        </div>
+
+        <div class="call-controls">
+          <button id="call-btn" class="btn btn-primary call-main">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.25 11.4 11.4 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A18 18 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .58 3.6 1 1 0 0 1-.25 1L6.6 10.8z"/></svg>
+            <span id="call-btn-label">Start call</span>
+          </button>
+          <button id="mute-btn" class="btn btn-ghost" disabled>Mute</button>
+        </div>
+
+        <div class="call-foot">
+          <span id="timer">00:00</span>
+          <span class="pulse-text">Powered by Vapi · Realtime voice AI</span>
+        </div>
+      </aside>
+    </section>
+
+    <section id="capabilities" class="section">
+      <h2>What the agent can help with</h2>
+      <p class="section-sub">Trained on Geoteknik product knowledge, common errors, and step-by-step troubleshooting playbooks.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="card-icon">⚙️</div>
+          <h3>Installation &amp; licensing</h3>
+          <p>Activation errors, license validation, machine transfers, and re-install guidance.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">📐</div>
+          <h3>Project &amp; analysis errors</h3>
+          <p>Mesh issues, convergence failures, soil parameter conflicts, and unit mismatches.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">📊</div>
+          <h3>Reports &amp; export</h3>
+          <p>Report engine failures, missing figures, PDF export issues, and template fixes.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🔄</div>
+          <h3>Updates &amp; compatibility</h3>
+          <p>Version checks, upgrade paths, and OS compatibility — Windows updates included.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🧭</div>
+          <h3>Workflow guidance</h3>
+          <p>How-to walkthroughs for slope stability, retaining walls, settlement, and more.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🛟</div>
+          <h3>Escalation when needed</h3>
+          <p>If it can’t resolve your issue, it captures the context and hands you to a human.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="section section-alt">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><span>1</span><div><h4>Click “Start call”</h4><p>Allow your browser to use the microphone. No installs, no phone number needed.</p></div></li>
+        <li><span>2</span><div><h4>Describe your issue</h4><p>Speak naturally. The agent understands context and asks follow-up questions.</p></div></li>
+        <li><span>3</span><div><h4>Get a fix in real time</h4><p>It walks you through resolution steps, or escalates to a human with full context.</p></div></li>
+      </ol>
+    </section>
+
+    <section id="faq" class="section">
+      <h2>Frequently asked</h2>
+      <div class="faq">
+        <details><summary>Is this a real AI or a recording?</summary><p>It’s a live AI voice agent powered by our Geoteknik knowledge base — every call is unique.</p></details>
+        <details><summary>Will it know my license / project details?</summary><p>This public demo doesn’t look up your account. For account-specific help, the agent will hand off to a human.</p></details>
+        <details><summary>Does it work on mobile?</summary><p>Yes. Use a recent Chrome, Safari, or Edge browser and grant microphone permission.</p></details>
+        <details><summary>What if it can’t solve my problem?</summary><p>It will capture your issue and route it to our engineering support team automatically.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div>© Geoteknik · Voice Support Demo</div>
+    <div>Built on the Geoteknik Voice Agent · Vapi realtime stack</div>
+  </footer>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
