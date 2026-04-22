@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Geoteknik AI Support — Live Demo</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #070d1a;
+      --bg2:       #0d1528;
+      --bg3:       #111e35;
+      --border:    #1e2d4a;
+      --blue:      #3b82f6;
+      --blue-glow: #3b82f640;
+      --teal:      #06b6d4;
+      --green:     #10b981;
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --radius:    12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1rem 2rem;
+      background: #070d1acc;
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { display: flex; align-items: center; gap: .6rem; font-size: 1.1rem; font-weight: 700; }
+    .logo-icon {
+      width: 34px; height: 34px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+    }
+    .badge {
+      font-size: .7rem; font-weight: 600; padding: .2rem .55rem;
+      border-radius: 20px; letter-spacing: .04em;
+    }
+    .badge-blue { background: #3b82f620; color: var(--blue); border: 1px solid #3b82f640; }
+    .badge-green { background: #10b98120; color: var(--green); border: 1px solid #10b98140; }
+    .badge-teal { background: #06b6d420; color: var(--teal); border: 1px solid #06b6d440; }
+    nav a {
+      color: var(--muted); text-decoration: none; font-size: .9rem;
+      transition: color .2s;
+    }
+    nav a:hover { color: var(--text); }
+    .nav-links { display: flex; gap: 1.8rem; align-items: center; }
+
+    /* ── HERO ── */
+    .hero {
+      text-align: center;
+      padding: 5rem 1.5rem 4rem;
+      max-width: 800px; margin: 0 auto;
+    }
+    .hero-tag {
+      display: inline-flex; align-items: center; gap: .5rem;
+      padding: .35rem .9rem; border-radius: 20px;
+      background: var(--blue-glow); border: 1px solid #3b82f660;
+      font-size: .8rem; color: var(--blue); margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800; line-height: 1.15;
+      background: linear-gradient(135deg, #fff 30%, var(--teal));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 1.2rem;
+    }
+    .hero p {
+      font-size: 1.1rem; color: var(--muted); max-width: 580px;
+      margin: 0 auto 2rem;
+    }
+    .hero-badges { display: flex; gap: .6rem; justify-content: center; flex-wrap: wrap; }
+
+    /* ── FEATURES ── */
+    .section { padding: 4rem 1.5rem; max-width: 1100px; margin: 0 auto; }
+    .section-label {
+      font-size: .8rem; font-weight: 600; letter-spacing: .1em;
+      color: var(--teal); text-transform: uppercase; margin-bottom: .6rem;
+    }
+    .section h2 { font-size: 1.8rem; font-weight: 700; margin-bottom: .6rem; }
+    .section p.sub { color: var(--muted); margin-bottom: 2.5rem; }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.2rem;
+    }
+    .feature-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 1.4rem;
+      transition: border-color .2s, transform .2s;
+    }
+    .feature-card:hover { border-color: var(--blue); transform: translateY(-2px); }
+    .feature-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; margin-bottom: 1rem;
+    }
+    .icon-blue { background: #3b82f620; }
+    .icon-teal { background: #06b6d420; }
+    .icon-green { background: #10b98120; }
+    .icon-purple { background: #a855f720; }
+    .feature-card h3 { font-size: 1rem; font-weight: 600; margin-bottom: .4rem; }
+    .feature-card p { font-size: .875rem; color: var(--muted); }
+
+    /* ── DEMO WIDGET ── */
+    #demo {
+      max-width: 760px; margin: 0 auto;
+      padding: 0 1.5rem 5rem;
+    }
+    .demo-card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .demo-header {
+      padding: 1.5rem 1.8rem;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .demo-header h3 { font-size: 1rem; font-weight: 600; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--muted); display: inline-block;
+      transition: background .3s;
+    }
+    .status-dot.active { background: var(--green); box-shadow: 0 0 8px var(--green); }
+    .status-dot.connecting { background: var(--blue); box-shadow: 0 0 8px var(--blue); }
+    .status-row {
+      display: flex; align-items: center; gap: .5rem;
+      font-size: .8rem; color: var(--muted);
+    }
+
+    /* call button area */
+    .call-area {
+      padding: 2.5rem 1.8rem;
+      display: flex; flex-direction: column; align-items: center; gap: 1.5rem;
+    }
+    .call-btn {
+      width: 80px; height: 80px; border-radius: 50%;
+      border: none; cursor: pointer; font-size: 1.8rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .15s, box-shadow .15s;
+      position: relative;
+    }
+    .call-btn:hover { transform: scale(1.06); }
+    .call-btn:active { transform: scale(.96); }
+    .call-btn.idle {
+      background: linear-gradient(135deg, var(--blue), var(--teal));
+      box-shadow: 0 0 30px #3b82f650;
+    }
+    .call-btn.active-call {
+      background: linear-gradient(135deg, var(--red), #f97316);
+      box-shadow: 0 0 30px #ef444450;
+      animation: pulse 1.8s infinite;
+    }
+    .call-btn.connecting-state {
+      background: var(--bg3);
+      border: 2px solid var(--blue);
+      cursor: not-allowed;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 20px #ef444440; }
+      50%       { box-shadow: 0 0 40px #ef444470; }
+    }
+    .call-label { font-size: .9rem; color: var(--muted); }
+
+    /* waveform */
+    .waveform {
+      display: flex; align-items: center; gap: 3px;
+      height: 28px; opacity: 0; transition: opacity .3s;
+    }
+    .waveform.visible { opacity: 1; }
+    .wave-bar {
+      width: 3px; border-radius: 3px;
+      background: var(--teal);
+      animation: wave 1.2s ease-in-out infinite;
+    }
+    .wave-bar:nth-child(1) { animation-delay: 0s;    height: 8px; }
+    .wave-bar:nth-child(2) { animation-delay: .15s;  height: 16px; }
+    .wave-bar:nth-child(3) { animation-delay: .3s;   height: 24px; }
+    .wave-bar:nth-child(4) { animation-delay: .45s;  height: 18px; }
+    .wave-bar:nth-child(5) { animation-delay: .6s;   height: 10px; }
+    .wave-bar:nth-child(6) { animation-delay: .75s;  height: 20px; }
+    .wave-bar:nth-child(7) { animation-delay: .9s;   height: 14px; }
+    @keyframes wave {
+      0%, 100% { transform: scaleY(1); }
+      50%       { transform: scaleY(1.8); }
+    }
+
+    /* transcript */
+    .transcript-area {
+      border-top: 1px solid var(--border);
+      padding: 1.2rem 1.8rem;
+      min-height: 140px; max-height: 260px;
+      overflow-y: auto;
+    }
+    .transcript-placeholder {
+      color: var(--muted); font-size: .875rem; text-align: center;
+      padding: 2rem 0;
+    }
+    .msg {
+      display: flex; gap: .75rem; margin-bottom: .9rem; align-items: flex-start;
+      animation: fadeIn .25s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+    .msg-avatar {
+      width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .75rem; font-weight: 700;
+    }
+    .msg-avatar.agent { background: linear-gradient(135deg, var(--blue), var(--teal)); }
+    .msg-avatar.user  { background: var(--bg3); border: 1px solid var(--border); color: var(--muted); }
+    .msg-body { flex: 1; }
+    .msg-name { font-size: .7rem; color: var(--muted); margin-bottom: .15rem; }
+    .msg-text { font-size: .875rem; line-height: 1.5; }
+
+    /* hints */
+    .hints {
+      padding: 1rem 1.8rem;
+      border-top: 1px solid var(--border);
+      display: flex; gap: .5rem; flex-wrap: wrap;
+    }
+    .hint-chip {
+      font-size: .75rem; padding: .25rem .7rem;
+      border-radius: 20px; background: var(--bg3);
+      border: 1px solid var(--border); color: var(--muted);
+      cursor: default;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center; padding: 1.8rem;
+      color: var(--muted); font-size: .8rem;
+    }
+
+    /* ── UTILS ── */
+    .divider {
+      border: none; border-top: 1px solid var(--border);
+      margin: 0;
+    }
+    .text-center { text-align: center; }
+    .mb-8 { margin-bottom: 4rem; }
+  </style>
+</head>
+<body>
+
+<!-- ── NAV ── -->
+<nav>
+  <div class="logo">
+    <div class="logo-icon">🌍</div>
+    <span>Geoteknik</span>
+    <span class="badge badge-blue">AI Support</span>
+  </div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#demo">Live Demo</a>
+  </div>
+</nav>
+
+<!-- ── HERO ── -->
+<section class="hero">
+  <div class="hero-tag">
+    <span>🤖</span> AI-Powered Technical Support
+  </div>
+  <h1>Voice Support Agent<br/>for Geoteknik Software</h1>
+  <p>
+    Instant, intelligent support for license activation and report generation issues —
+    available in English and Turkish, 24/7.
+  </p>
+  <div class="hero-badges">
+    <span class="badge badge-teal">🌐 Bilingual EN / TR</span>
+    <span class="badge badge-green">⚡ Real-Time AI</span>
+    <span class="badge badge-blue">🛠 License & Report Support</span>
+  </div>
+</section>
+
+<!-- ── FEATURES ── -->
+<section class="section mb-8" id="features">
+  <p class="section-label">Capabilities</p>
+  <h2>Everything your team needs</h2>
+  <p class="sub">The agent handles your most common support calls end-to-end — no human needed.</p>
+  <div class="features">
+    <div class="feature-card">
+      <div class="feature-icon icon-blue">🔑</div>
+      <h3>License Activation</h3>
+      <p>Resolves Error 404-L and license activation failures with step-by-step guidance and remote validation.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-teal">📊</div>
+      <h3>Report Generation</h3>
+      <p>Diagnoses stalled soil stability report engines, validates project data, and remotely restarts the engine.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-green">🌐</div>
+      <h3>Bilingual Support</h3>
+      <p>Automatically detects if the caller speaks Turkish or English and responds in the same language throughout.</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon icon-purple">🎫</div>
+      <h3>Smart Escalation</h3>
+      <p>When the agent cannot resolve an issue, it creates a support ticket and guarantees a specialist callback within 4 hours.</p>
+    </div>
+  </div>
+</section>
+
+<hr class="divider" />
+
+<!-- ── DEMO ── -->
+<section class="section text-center">
+  <p class="section-label">Interactive Demo</p>
+  <h2>Talk to the agent now</h2>
+  <p class="sub">Click the button below and speak directly with Alex — our AI support agent. No phone call needed.</p>
+</section>
+
+<div id="demo">
+  <div class="demo-card">
+
+    <!-- header -->
+    <div class="demo-header">
+      <h3>Alex — Geoteknik Support Agent</h3>
+      <div class="status-row">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">Ready</span>
+      </div>
+    </div>
+
+    <!-- call area -->
+    <div class="call-area">
+      <div class="waveform" id="waveform">
+        <div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div><div class="wave-bar"></div>
+        <div class="wave-bar"></div>
+      </div>
+      <button class="call-btn idle" id="callBtn" onclick="toggleCall()">📞</button>
+      <span class="call-label" id="callLabel">Click to start demo call</span>
+    </div>
+
+    <!-- transcript -->
+    <div class="transcript-area" id="transcript">
+      <div class="transcript-placeholder" id="placeholder">
+        Your conversation with Alex will appear here...
+      </div>
+    </div>
+
+    <!-- hint chips -->
+    <div class="hints">
+      <span class="hint-chip">Try: "My license won't activate"</span>
+      <span class="hint-chip">Try: "Lisans hatası alıyorum"</span>
+      <span class="hint-chip">Try: "Report won't generate"</span>
+      <span class="hint-chip">Try: "Rapor oluşturulamıyor"</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <p>© 2024 Geoteknik · AI Voice Support Agent · Powered by Vapi AI</p>
+</footer>
+
+<!-- ── VAPI WEB SDK ── -->
+<!-- Vapi SDK served locally — no CDN dependency -->
+<script src="/vapi-sdk.js"></script>
+<script>
+  let vapi = null;
+  let callActive = false;
+
+  const callBtn    = document.getElementById('callBtn');
+  const callLabel  = document.getElementById('callLabel');
+  const statusDot  = document.getElementById('statusDot');
+  const statusText = document.getElementById('statusText');
+  const waveform   = document.getElementById('waveform');
+  const transcript = document.getElementById('transcript');
+  const placeholder= document.getElementById('placeholder');
+
+  // ── load config from server then init Vapi ──────────────────────────────
+  async function initVapi() {
+    // Check SDK loaded
+    const VapiClass = (typeof Vapi !== 'undefined') ? (Vapi.default || Vapi) : null;
+    if (!VapiClass) {
+      setStatus('error', '⚠ Vapi SDK failed to load — check internet connection');
+      callBtn.disabled = true;
+      console.error('[Demo] Vapi SDK not loaded');
+      return;
+    }
+
+    let data;
+    try {
+      const res = await fetch('/demo/config');
+      data = await res.json();
+    } catch (err) {
+      setStatus('error', '⚠ Could not reach server');
+      callBtn.disabled = true;
+      console.error('[Demo] /demo/config fetch failed:', err);
+      return;
+    }
+
+    if (!data.publicKey) {
+      setStatus('error', '⚠ VAPI_PUBLIC_KEY not set in .env');
+      callBtn.disabled = true;
+      return;
+    }
+
+    try {
+      vapi = new VapiClass(data.publicKey);
+      window._vapiAssistant = data.assistant;
+      bindEvents();
+      setStatus('idle', 'Ready');
+      console.log('[Demo] Vapi initialised successfully');
+    } catch (err) {
+      setStatus('error', '⚠ Invalid public key');
+      callBtn.disabled = true;
+      console.error('[Demo] Vapi init error:', err);
+    }
+  }
+
+  // ── toggle call ──────────────────────────────────────────────────────────
+  async function toggleCall() {
+    if (!vapi) return;
+    if (callActive) {
+      vapi.stop();
+    } else {
+      setStatus('connecting', 'Connecting...');
+      callBtn.className = 'call-btn connecting-state';
+      callBtn.textContent = '⌛';
+      callLabel.textContent = 'Connecting to Alex...';
+      try {
+        await vapi.start(window._vapiAssistant);
+      } catch (err) {
+        setStatus('idle', 'Ready');
+        callBtn.className = 'call-btn idle';
+        callBtn.textContent = '📞';
+        callLabel.textContent = 'Click to start demo call';
+        addMessage('system', 'Could not start call. Check your microphone permissions.');
+      }
+    }
+  }
+
+  // ── Vapi event listeners ─────────────────────────────────────────────────
+  function bindEvents() {
+    vapi.on('call-start', () => {
+      callActive = true;
+      callBtn.className = 'call-btn active-call';
+      callBtn.textContent = '📵';
+      callLabel.textContent = 'Call in progress — click to end';
+      setStatus('active', 'Live');
+      waveform.classList.add('visible');
+      if (placeholder) placeholder.style.display = 'none';
+    });
+
+    vapi.on('call-end', () => {
+      callActive = false;
+      callBtn.className = 'call-btn idle';
+      callBtn.textContent = '📞';
+      callLabel.textContent = 'Click to start demo call';
+      setStatus('idle', 'Ready');
+      waveform.classList.remove('visible');
+    });
+
+    vapi.on('speech-start', () => {
+      waveform.classList.add('visible');
+    });
+
+    vapi.on('speech-end', () => {
+      if (!callActive) waveform.classList.remove('visible');
+    });
+
+    vapi.on('message', (msg) => {
+      if (msg.type === 'transcript' && msg.transcriptType === 'final') {
+        const role = msg.role === 'assistant' ? 'agent' : 'user';
+        addMessage(role, msg.transcript);
+      }
+    });
+
+    vapi.on('error', (err) => {
+      console.error('[Vapi]', err);
+      setStatus('idle', 'Ready');
+      callActive = false;
+      callBtn.className = 'call-btn idle';
+      callBtn.textContent = '📞';
+      callLabel.textContent = 'Click to start demo call';
+      waveform.classList.remove('visible');
+    });
+  }
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  function setStatus(state, text) {
+    statusText.textContent = text;
+    statusDot.className = 'status-dot';
+    if (state === 'active')     statusDot.classList.add('active');
+    if (state === 'connecting') statusDot.classList.add('connecting');
+  }
+
+  function addMessage(role, text) {
+    const msg = document.createElement('div');
+    msg.className = 'msg';
+    const isAgent = role === 'agent';
+    msg.innerHTML = `
+      <div class="msg-avatar ${isAgent ? 'agent' : 'user'}">${isAgent ? 'A' : 'U'}</div>
+      <div class="msg-body">
+        <div class="msg-name">${isAgent ? 'Alex · Support Agent' : 'You'}</div>
+        <div class="msg-text">${escapeHtml(text)}</div>
+      </div>`;
+    transcript.appendChild(msg);
+    transcript.scrollTop = transcript.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── boot — wait up to 5s for SDK to load from CDN ───────────────────────
+  function waitForVapi(attempts) {
+    const sdkReady = typeof Vapi !== 'undefined' && (typeof Vapi === 'function' || typeof Vapi.default === 'function');
+    if (sdkReady) { initVapi(); return; }
+    if (attempts <= 0) {
+      setStatus('error', '⚠ Vapi SDK failed to load — check internet');
+      callBtn.disabled = true;
+      return;
+    }
+    setTimeout(function() { waitForVapi(attempts - 1); }, 500);
+  }
+  waitForVapi(10);
+</script>
+</body>
+</html>
