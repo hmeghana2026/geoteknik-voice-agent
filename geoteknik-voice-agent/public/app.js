@@ -1,5 +1,4 @@
-import * as VapiModule from 'https://cdn.jsdelivr.net/npm/@vapi-ai/web@2.3.7/+esm';
-const Vapi = VapiModule.default || VapiModule.Vapi || VapiModule;
+import Vapi from '/vendor/vapi.bundle.js';
 
 const els = {
   callBtn: document.getElementById('call-btn'),
