@@ -51,6 +51,18 @@ a { color: inherit; text-decoration: none; }
   background: rgba(79,140,255,0.15); color: var(--text) !important;
   border: 1px solid rgba(79,140,255,0.35);
 }
+.lang-switch {
+  display: inline-flex; padding: 3px; gap: 2px;
+  background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.lang-btn {
+  background: transparent; color: var(--text-dim); border: none;
+  padding: 6px 10px; border-radius: 6px; font-weight: 600; font-size: 12px;
+  cursor: pointer; font-family: inherit; letter-spacing: .4px;
+}
+.lang-btn.active { background: rgba(79,140,255,0.25); color: var(--text); }
+.lang-btn:hover:not(.active) { color: var(--text); }
 
 /* Hero */
 .hero {

@@ -1,4 +1,5 @@
 import Vapi from '/vendor/vapi.bundle.js';
+import { translations } from '/i18n.js';
 
 const els = {
   callBtn: document.getElementById('call-btn'),
@@ -18,6 +19,42 @@ let muted = false;
 let timerInt = null;
 let startedAt = 0;
 
+let lang = (localStorage.getItem('lang') === 'tr') ? 'tr' : 'en';
+const t = (k) => (translations[lang] && translations[lang][k]) || translations.en[k] || k;
+
+function applyTranslations() {
+  document.documentElement.lang = t('htmlLang');
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    el.textContent = t(key);
+  });
+  document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-html');
+    el.innerHTML = t(key);
+  });
+  document.querySelectorAll('.lang-btn').forEach((b) => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
+  // Refresh dynamic strings
+  if (!inCall) {
+    setStatus(t(vapi ? 'statusReady' : 'statusIdle'));
+    els.callBtnLabel.textContent = t('startCall');
+    els.muteBtn.textContent = t('mute');
+  } else {
+    els.callBtnLabel.textContent = t('endCall');
+    els.muteBtn.textContent = muted ? t('unmute') : t('mute');
+  }
+  // Reset placeholder text if present
+  const ph = els.transcript.querySelector('.placeholder');
+  if (ph) ph.textContent = t('transcriptPlaceholder');
+}
+
+function setLang(next) {
+  lang = next === 'tr' ? 'tr' : 'en';
+  localStorage.setItem('lang', lang);
+  applyTranslations();
+}
+
 function setStatus(text, type = '') {
   els.status.textContent = text;
   els.status.className = 'call-status' + (type ? ' ' + type : '');
@@ -31,7 +68,7 @@ function notice(text, kind = 'info') {
   const placeholder = els.transcript.querySelector('.placeholder');
   if (placeholder) placeholder.remove();
   const div = document.createElement('div');
-  div.className = `msg ${kind === 'error' ? 'agent' : 'agent'}`;
+  div.className = 'msg agent';
   div.style.background = kind === 'error' ? 'rgba(239,68,68,0.18)' : 'rgba(245,158,11,0.18)';
   div.innerHTML = `<div class="who">${kind === 'error' ? 'Error' : 'Notice'}</div><div class="body"></div>`;
   div.querySelector('.body').textContent = text;
@@ -51,7 +88,7 @@ function addMessage(who, text) {
     div.className = `msg ${who}`;
     div.dataset.who = who;
     div.dataset.partial = 'true';
-    div.innerHTML = `<div class="who">${who === 'user' ? 'You' : 'Agent'}</div><div class="body"></div>`;
+    div.innerHTML = `<div class="who">${who === 'user' ? (lang === 'tr' ? 'Siz' : 'You') : (lang === 'tr' ? 'Asistan' : 'Agent')}</div><div class="body"></div>`;
     div.querySelector('.body').textContent = text;
     els.transcript.appendChild(div);
   }
@@ -85,16 +122,16 @@ async function ensureMicAccess() {
     throw new Error('This browser does not support microphone access.');
   }
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  // We don't need the stream itself — Vapi/Daily will request its own.
-  stream.getTracks().forEach((t) => t.stop());
+  stream.getTracks().forEach((tr) => tr.stop());
 }
 
 async function init() {
+  applyTranslations();
   try {
     const cfg = await loadConfig();
     if (!cfg.publicKey || !cfg.assistantId) {
-      setStatus('Voice agent not configured', 'error');
-      notice('Server is missing VAPI_PUBLIC_KEY or VAPI_ASSISTANT_ID.', 'error');
+      setStatus(t('statusCantStart'), 'error');
+      notice(t('notConfigured'), 'error');
       els.callBtn.disabled = true;
       els.heroCall.disabled = true;
       return;
@@ -106,23 +143,23 @@ async function init() {
       inCall = true;
       startedAt = Date.now();
       timerInt = setInterval(tickTimer, 500);
-      setStatus('Connected — speak naturally', 'live');
+      setStatus(t('statusConnected'), 'live');
       els.orb.classList.add('live');
       els.callBtn.classList.add('end');
-      els.callBtnLabel.textContent = 'End call';
+      els.callBtnLabel.textContent = t('endCall');
       els.muteBtn.disabled = false;
     });
 
     vapi.on('call-end', () => {
       inCall = false;
       clearInterval(timerInt);
-      setStatus('Call ended');
+      setStatus(t('statusEnded'));
       els.orb.classList.remove('live', 'speaking');
       els.callBtn.classList.remove('end');
-      els.callBtnLabel.textContent = 'Start call';
+      els.callBtnLabel.textContent = t('startCall');
       els.muteBtn.disabled = true;
       muted = false;
-      els.muteBtn.textContent = 'Mute';
+      els.muteBtn.textContent = t('mute');
     });
 
     vapi.on('speech-start', () => els.orb.classList.add('speaking'));
@@ -139,46 +176,57 @@ async function init() {
     vapi.on('error', (e) => {
       console.error('Vapi error', e);
       const detail = (e && (e.errorMsg || e.message || e.error?.message)) || 'unknown error';
-      setStatus('Connection issue — ' + detail, 'error');
+      setStatus(t('statusCantStart') + ' — ' + detail, 'error');
       notice('Vapi error: ' + detail, 'error');
     });
 
-    setStatus('Ready — click "Start call" to begin');
+    setStatus(t('statusReady'));
   } catch (err) {
     console.error('init failed', err);
-    setStatus('Could not initialize voice agent', 'error');
+    setStatus(t('statusCantStart'), 'error');
     notice('Initialization error: ' + (err?.message || err), 'error');
     els.callBtn.disabled = true;
     els.heroCall.disabled = true;
   }
 }
 
+function buildAssistantOverrides() {
+  // Override the assistant's transcriber + greeting based on the chosen UI language.
+  if (lang === 'tr') {
+    return {
+      firstMessage: t('firstMessage'),
+      transcriber: { provider: 'deepgram', model: 'nova-2', language: 'tr' },
+    };
+  }
+  return {
+    firstMessage: t('firstMessage'),
+    transcriber: { provider: 'deepgram', model: 'nova-2', language: 'en' },
+  };
+}
+
 async function startCall() {
   if (!vapi || !assistantId) {
-    notice('Voice agent is not ready yet. Please refresh the page.', 'error');
+    notice(lang === 'tr' ? 'Sesli asistan henüz hazır değil. Sayfayı yenileyin.' : 'Voice agent is not ready yet. Please refresh the page.', 'error');
     return;
   }
   try {
-    setStatus('Requesting microphone…');
+    setStatus(t('statusRequestingMic'));
     await ensureMicAccess();
-    setStatus('Connecting…');
+    setStatus(t('statusConnecting'));
     clearTranscript();
-    await vapi.start(assistantId);
+    await vapi.start(assistantId, buildAssistantOverrides());
   } catch (err) {
     console.error('start failed', err);
     const msg = (err && (err.message || err.errorMsg)) || String(err);
     if (/permission|denied|NotAllowedError/i.test(msg)) {
-      setStatus('Microphone blocked', 'error');
-      const hint = isInsideIframe()
-        ? 'Microphone is blocked inside the embedded preview. Click the "Open in new tab" icon at the top of the preview, then allow the mic prompt.'
-        : 'Microphone permission was denied. Click the lock icon in your address bar and allow microphone access.';
-      notice(hint, 'error');
+      setStatus(t('statusMicBlocked'), 'error');
+      notice(isInsideIframe() ? t('micBlockedHint') : t('micDeniedHint'), 'error');
     } else if (/NotFoundError|no.*device/i.test(msg)) {
-      setStatus('No microphone found', 'error');
-      notice('No microphone was detected on this device.', 'error');
+      setStatus(t('statusNoMic'), 'error');
+      notice(t('noMicHint'), 'error');
     } else {
-      setStatus('Could not start call', 'error');
-      notice('Start call failed: ' + msg, 'error');
+      setStatus(t('statusCantStart'), 'error');
+      notice(t('statusCantStart') + ': ' + msg, 'error');
     }
   }
 }
@@ -201,14 +249,15 @@ els.muteBtn.addEventListener('click', () => {
   if (!vapi) return;
   muted = !muted;
   vapi.setMuted(muted);
-  els.muteBtn.textContent = muted ? 'Unmute' : 'Mute';
+  els.muteBtn.textContent = muted ? t('unmute') : t('mute');
 });
 
-// Show iframe hint upfront so users understand the limitation.
+document.querySelectorAll('.lang-btn').forEach((b) => {
+  b.addEventListener('click', () => setLang(b.dataset.lang));
+});
+
 if (isInsideIframe()) {
-  setTimeout(() => {
-    notice('You are viewing this inside an embedded preview. If the call fails to start, open the page in a new tab so the browser can prompt for microphone access.', 'info');
-  }, 400);
+  setTimeout(() => notice(t('iframeNotice'), 'info'), 400);
 }
 
 init();
