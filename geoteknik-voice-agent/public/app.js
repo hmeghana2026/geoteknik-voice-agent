@@ -175,7 +175,7 @@ async function init() {
 
     vapi.on('error', (e) => {
       console.error('Vapi error', e);
-      const detail = (e && (e.errorMsg || e.message || e.error?.message)) || 'unknown error';
+      const detail = describeError(e);
       setStatus(t('statusCantStart') + ' — ' + detail, 'error');
       notice('Vapi error: ' + detail, 'error');
     });
@@ -210,13 +210,26 @@ async function buildAssistantOverrides() {
     },
   };
 
-  if (promptData.systemPrompt) {
-    overrides.model = {
-      messages: [{ role: 'system', content: promptData.systemPrompt }],
-    };
-  }
-
+  // NOTE: We intentionally do NOT override `model` here.
+  // Vapi requires a full model spec (provider + model) when overriding,
+  // and the assistant configured in the Vapi dashboard already carries the
+  // system prompt. To change the prompt, edit it in the Vapi dashboard.
   return overrides;
+}
+
+function describeError(e) {
+  if (!e) return 'unknown error';
+  if (typeof e === 'string') return e;
+  // Vapi error envelopes nest messages a few levels deep
+  const inner = e.error?.error?.message || e.error?.message || e.errorMsg || e.message;
+  if (Array.isArray(inner)) return inner.join(' · ');
+  if (typeof inner === 'string') return inner;
+  if (typeof inner === 'object' && inner) {
+    const m = inner.message;
+    if (Array.isArray(m)) return m.join(' · ');
+    if (typeof m === 'string') return m;
+  }
+  try { return JSON.stringify(e); } catch { return String(e); }
 }
 
 async function startCall() {
@@ -233,7 +246,7 @@ async function startCall() {
     await vapi.start(assistantId, overrides);
   } catch (err) {
     console.error('start failed', err);
-    const msg = (err && (err.message || err.errorMsg)) || String(err);
+    const msg = describeError(err);
     if (/permission|denied|NotAllowedError/i.test(msg)) {
       setStatus(t('statusMicBlocked'), 'error');
       notice(isInsideIframe() ? t('micBlockedHint') : t('micDeniedHint'), 'error');
