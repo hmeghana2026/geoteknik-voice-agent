@@ -4,6 +4,7 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const twilioRoutes = require('./routes/twilio');
 const vapiRoutes   = require('./routes/vapi');
+const searchRoutes = require('./routes/search');
 const { buildSystemPrompt, getFirstMessage } = require('./agentPrompt');
 
 const app = express();
@@ -26,6 +27,9 @@ app.get('/api/config', (req, res) => {
     assistantId: process.env.VAPI_ASSISTANT_ID || '',
   });
 });
+
+// Knowledge-base + manuals search (used as a Vapi tool during calls).
+app.use('/api', searchRoutes);
 
 // Returns the system prompt + first message for a given UI language.
 // The browser passes these to Vapi as assistantOverrides on call start.
