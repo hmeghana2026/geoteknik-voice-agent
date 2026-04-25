@@ -37,3 +37,7 @@ build/
 # Database
 *.sql.backup
 database/backups/
+
+# Manuals to ingest — PDFs stay local, only the README is tracked
+manuals_to_ingest/*
+!manuals_to_ingest/README.md
