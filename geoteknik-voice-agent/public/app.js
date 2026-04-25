@@ -8,7 +8,6 @@ const els = {
   muteBtn: document.getElementById('mute-btn'),
   status: document.getElementById('call-status'),
   orb: document.getElementById('orb'),
-  transcript: document.getElementById('transcript'),
   timer: document.getElementById('timer'),
 };
 
@@ -44,9 +43,6 @@ function applyTranslations() {
     els.callBtnLabel.textContent = t('endCall');
     els.muteBtn.textContent = muted ? t('unmute') : t('mute');
   }
-  // Reset placeholder text if present
-  const ph = els.transcript.querySelector('.placeholder');
-  if (ph) ph.textContent = t('transcriptPlaceholder');
 }
 
 function setLang(next) {
@@ -60,44 +56,11 @@ function setStatus(text, type = '') {
   els.status.className = 'call-status' + (type ? ' ' + type : '');
 }
 
-function clearTranscript() {
-  els.transcript.innerHTML = '';
-}
+// Transcript UI was removed — surface notices via the status line instead.
+function clearTranscript() { /* no-op (transcript UI removed) */ }
 
 function notice(text, kind = 'info') {
-  const placeholder = els.transcript.querySelector('.placeholder');
-  if (placeholder) placeholder.remove();
-  const div = document.createElement('div');
-  div.className = 'msg agent';
-  div.style.background = kind === 'error' ? 'rgba(239,68,68,0.18)' : 'rgba(245,158,11,0.18)';
-  div.innerHTML = `<div class="who">${kind === 'error' ? 'Error' : 'Notice'}</div><div class="body"></div>`;
-  div.querySelector('.body').textContent = text;
-  els.transcript.appendChild(div);
-  els.transcript.scrollTop = els.transcript.scrollHeight;
-}
-
-function addMessage(who, text) {
-  const placeholder = els.transcript.querySelector('.placeholder');
-  if (placeholder) placeholder.remove();
-
-  const last = els.transcript.lastElementChild;
-  if (last && last.dataset.who === who && last.dataset.partial === 'true') {
-    last.querySelector('.body').textContent = text;
-  } else {
-    const div = document.createElement('div');
-    div.className = `msg ${who}`;
-    div.dataset.who = who;
-    div.dataset.partial = 'true';
-    div.innerHTML = `<div class="who">${who === 'user' ? (lang === 'tr' ? 'Siz' : 'You') : (lang === 'tr' ? 'Asistan' : 'Agent')}</div><div class="body"></div>`;
-    div.querySelector('.body').textContent = text;
-    els.transcript.appendChild(div);
-  }
-  els.transcript.scrollTop = els.transcript.scrollHeight;
-}
-
-function finalizeMessage(who) {
-  const last = els.transcript.lastElementChild;
-  if (last && last.dataset.who === who) last.dataset.partial = 'false';
+  setStatus(text, kind === 'error' ? 'error' : '');
 }
 
 function tickTimer() {
@@ -165,13 +128,7 @@ async function init() {
     vapi.on('speech-start', () => els.orb.classList.add('speaking'));
     vapi.on('speech-end', () => els.orb.classList.remove('speaking'));
 
-    vapi.on('message', (msg) => {
-      if (msg.type === 'transcript' && msg.transcript) {
-        const who = msg.role === 'user' ? 'user' : 'agent';
-        addMessage(who, msg.transcript);
-        if (msg.transcriptType === 'final') finalizeMessage(who);
-      }
-    });
+    // Transcript UI was removed; we no longer subscribe to message events.
 
     vapi.on('error', (e) => {
       console.error('Vapi error', e);
