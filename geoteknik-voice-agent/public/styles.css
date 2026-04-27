@@ -224,9 +224,15 @@ footer {
   .hero { grid-template-columns: 1fr; gap: 40px; }
   .hero h1 { font-size: 40px; }
   .grid, .steps { grid-template-columns: 1fr; }
-  /* Hide nav links on mobile but keep the lang-switch visible */
   .nav nav { display: none; }
-  /* lang-switch stays on the right next to the brand */
+  .nav { padding: 16px 20px; }
   .nav > .lang-switch { margin-left: auto; }
   footer { flex-direction: column; gap: 8px; }
+}
+
+@media (max-width: 480px) {
+  .hero { padding: 0 20px; margin: 20px auto 50px; }
+  .hero h1 { font-size: 32px; }
+  .section { padding: 48px 20px; }
+  .call-card { padding: 24px 20px; }
 }
