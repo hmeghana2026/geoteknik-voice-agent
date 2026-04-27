@@ -1,0 +1,46 @@
+Call ID,Assistant ID,Squad ID,Customer ID,Customer Name,Customer Number,Customer SIP URI,Customer Extension,Phone Number ID,Ended Reason,Type,Duration,Started At,Ended At,Transcript,Summary,Success Evaluation,Recording URL,Cost,Phone Call Provider,Phone Call Provider ID,Created At,Updated At,Success Evaluation - Pass/Fail,Success Evaluation - Descriptive
+019dce86-57c5-7000-a506-7fba0e4e3a88,2e1677a4-ae5a-41e6-8189-7a119c9cfb8c,,,,,,,,customer-ended-call,webCall,119,2026-04-27 10:40:05 GMT+0,2026-04-27 10:42:05 GMT+0,"AI: Hi there. This is Alex from Geo Technek customer support. How can I help you today?
+User: Hello.
+AI: Hi there. This is Alex from GeoTechNick customer support. How can I help you today?
+User: Metabolic
+AI: I'm sorry. I didn't quite catch that. Could you please repeat it?
+User: Yes.
+AI: I'm sorry. I'm still having a little trouble understanding. Um, could you tell me what product or service you're calling
+User: And we can we go on with Turkish? Birthana, uh, sorry, equipment armuxed serum.
+AI: I under
+User: Hello?
+AI: Hi there.
+User: Hi. Can we go on in Turkey?
+AI: I'm sorry. I'm not sure I understand. Uh, can you please clarify what you mean by go on in Turkey?
+User: No. Go, uh, can we speak Turkish?
+AI: Oh, I see. I apologize, but I can only communicate in English. Is there anything I can help you with? English today?
+User: No. But you did help me in Turkish a second ago.
+AI: I don't think I can speak Turkish.
+User: No. You do. You can. You just did it.
+AI: I'm sorry. I'm not able to speak Turkish.
+User: May I have a
+AI: I can
+AI: I'm sorry. I'm not able to speak Turkish.
+",,,https://storage.vapi.ai/019dce86-57c5-7000-a506-7fba0e4e3a88-1777286527885-99c7caad-d624-4b45-b223-a103f6c0c517-mono.wav,0.2102,,,2026-04-27 10:40:04 GMT+0,2026-04-27 10:42:09 GMT+0,false,Poor
+019dce86-4de6-7000-b20a-75117d385371,2e1677a4-ae5a-41e6-8189-7a119c9cfb8c,,,,,,,,customer-ended-call,webCall,43,2026-04-27 10:40:02 GMT+0,2026-04-27 10:40:45 GMT+0,"AI: Hi there. This is Alex from Geo TechNick customer support. How can I help you today?
+User: Medawar Nasalsson?
+AI: I'm sorry. I didn't quite catch that. could you please spell the name for me?
+User: Yeah. I'm speaking to you in Turkish. Can you speak Turkish? Nasul Sun?
+AI: Maribel, Ben Geotechnick, mister Alex.
+",,,https://storage.vapi.ai/019dce86-4de6-7000-b20a-75117d385371-1777286448019-ea347eea-bd8c-48da-8ace-98dcb4a614de-mono.wav,0.0681,,,2026-04-27 10:40:01 GMT+0,2026-04-27 10:40:49 GMT+0,false,Poor
+019dce85-63ae-7eeb-8f67-f04744b850a5,2e1677a4-ae5a-41e6-8189-7a119c9cfb8c,,,,,,,,silence-timed-out,webCall,40,2026-04-27 10:39:01 GMT+0,2026-04-27 10:39:42 GMT+0,"AI: Hi there. This is Alex from GeoTech Nick customer support. How can I help you today?
+",,,https://storage.vapi.ai/019dce85-63ae-7eeb-8f67-f04744b850a5-1777286385207-c086f4c8-4a3c-486e-95da-73aa674047fb-mono.wav,0.0466,,,2026-04-27 10:39:01 GMT+0,2026-04-27 10:39:48 GMT+0,false,Poor
+019dcdc5-54cd-799d-ae13-9190bf069178,2e1677a4-ae5a-41e6-8189-7a119c9cfb8c,,,,,,,,customer-ended-call,webCall,72,2026-04-27 07:09:15 GMT+0,2026-04-27 07:10:28 GMT+0,"AI: Hi there. This is Alex from Geo Technek customer support. How can I help you today?
+User: Recently bought a drone and it's not quite working. What should I do with it?
+AI: I understand that's frustrating. I'm here to help get this sorted out for you. Could you tell me a bit more about what's happening with the drone?
+User: It's just not turning on ever since I bought it.
+AI: Okay. So it's not powering on at all? Even after you've tried to turn
+User: No.
+AI: it. Have you
+User: No. It's not anymore at all.
+AI: see. And when you say it's not turning on, do you mean the light aren't coming on? Or is there no response at all?
+User: There's no response at all.
+AI: No response at all. Let me think about that. Can you confirm if you've fully charged the drone's battery?
+User: Yeah. Fully charged it. Yeah.
+AI: You fully charged it. And there's still no response. Could you tell me the model of the drone you purchased?
+",,,https://storage.vapi.ai/019dcdc5-54cd-799d-ae13-9190bf069178-1777273830686-3366fc5f-2f62-47d0-a9dc-8c1feeb187f4-mono.wav,0.1218,,,2026-04-27 07:09:14 GMT+0,2026-04-27 07:10:32 GMT+0,false,Good
